@@ -1,0 +1,34 @@
+{
+  "name": "@acoyfellow/amber",
+  "version": "0.1.0",
+  "description": "Pause code your agent wrote. Run an LLM-written script in a Cloudflare Durable Object, freeze it mid-loop at a tool() call, and resume it later on a fresh object without replay.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jordan Coeyman",
+  "repository": { "type": "git", "url": "git+https://github.com/acoyfellow/amber.git" },
+  "homepage": "https://github.com/acoyfellow/amber#readme",
+  "keywords": ["cloudflare", "durable-objects", "workers", "codemode", "agents", "quickjs", "wasm", "snapshot", "durable-execution"],
+  "exports": {
+    ".": "./src/index.ts",
+    "./dq.wasm": "./engine/dq.wasm"
+  },
+  "files": ["src", "engine/dq.wasm", "engine/dq.c", "engine/wasi.patch", "engine/setup.sh", "THIRD_PARTY_NOTICES.md"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "vitest run",
+    "e2e": "node examples/approvals/e2e.mjs",
+    "check": "npm run typecheck && npm test && npm run e2e",
+    "engine": "bash engine/setup.sh"
+  },
+  "dependencies": {
+    "effect": "4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261023.1",
+    "@types/node": "^22.0.0",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5",
+    "wrangler": "4.152.0"
+  }
+}

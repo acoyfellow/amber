@@ -1,0 +1,12 @@
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	"name": "amber-approvals-example",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-10-01",
+	"compatibility_flags": ["nodejs_compat"],
+	// Local example only. The routes below run arbitrary code and have no auth: put them behind Cloudflare Access before you deploy.
+	"workers_dev": false,
+	"durable_objects": { "bindings": [{ "name": "SCRIPT", "class_name": "Script" }] },
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["Script"] }],
+	"rules": [{ "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": true }]
+}
