@@ -1,0 +1,33 @@
+{
+	"$schema": "../node_modules/wrangler/config-schema.json",
+	"name": "amber-site",
+	"main": "worker/index.ts",
+	// Public on purpose: the demo spends no AI budget and holds no secrets.
+	// Every run is capped by a tick budget, a slice limit, and source and answer size limits (shared/protocol.ts).
+	"workers_dev": false,
+	"preview_urls": false,
+	"routes": [{ "pattern": "amber.customer0.dev", "custom_domain": true }],
+	"compatibility_date": "2026-10-01",
+	"compatibility_flags": ["nodejs_compat"],
+	"assets": {
+		"directory": "./client/dist",
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": ["/api/*"]
+	},
+	"durable_objects": {
+		"bindings": [
+			{ "name": "PROGRAM", "class_name": "Program" },
+			{ "name": "STATE_MACHINE", "class_name": "StateMachineProgram" },
+			{ "name": "APPROVALS_AGENT", "class_name": "ApprovalsAgent" },
+			{ "name": "BENCH_PROGRESS", "class_name": "BenchProgress" },
+			{ "name": "BENCH_STORE", "class_name": "BenchStore" },
+			{ "name": "REPLAY", "class_name": "ReplayRunner" }
+		]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["Program", "StateMachineProgram", "ApprovalsAgent", "BenchProgress", "BenchStore", "ReplayRunner"] }],
+	"worker_loaders": [{ "binding": "LOADER" }],
+	"workflows": [{ "name": "amber-bench", "binding": "BENCH_WORKFLOW", "class_name": "BenchWorkflow" }],
+	"rules": [{ "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": true }],
+	"observability": { "enabled": true }
+}
