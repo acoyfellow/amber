@@ -1,7 +1,10 @@
-node_modules/
-.wrangler/
-engine/.build/
-test/fuzz-report.json
-*.log
 .dev.vars
 .env*
+.guardrail/
+.wrangler/
+*.log
+engine/.build/
+node_modules/
+site/.wrangler/
+site/client/dist/
+test/fuzz-report.json
