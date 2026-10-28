@@ -1,0 +1,59 @@
+site/programs/approvals.ts
+  s_a90e6f4617f964::t_ed945a96ed387e 1-24
+site/programs/counter.ts
+  s_a90e6f4617f964::t_b36c0e52e940fb 1-18
+site/programs/dungeon.ts
+  s_a90e6f4617f964::t_f6e9ce6fe603ff 1-103
+site/programs/loop.ts
+  s_a90e6f4617f964::t_322af02d4de9f1 1-9
+site/scripts/bench.mjs
+  s_a90e6f4617f964::t_9076c227be04cb 1-70
+site/scripts/e2e.mjs
+  s_a90e6f4617f964::t_44c1ee59c3f1d7 1-132
+site/shared/bench.ts
+  s_a90e6f4617f964::t_48bf3c7a74499e 1-124
+site/shared/codemode.ts
+  s_a90e6f4617f964::t_c09ee105250d9a 1-101
+site/shared/protocol.ts
+  s_a90e6f4617f964::t_444835d9bd34c0 1-97
+site/worker/bench/agent.ts
+  s_a90e6f4617f964::t_1f81705ad24031 1-42
+site/worker/bench/codemode-scripts.ts
+  s_a90e6f4617f964::t_4f1011f6a87b48 1-23
+site/worker/bench/codemode.ts
+  s_a90e6f4617f964::t_fa19fe6ff948c2 1-244
+site/worker/bench/programs.ts
+  s_a90e6f4617f964::t_5cf8c5093c5f47 1-10
+site/worker/bench/replay.ts
+  s_a90e6f4617f964::t_51689b2db29c33 1-119
+site/worker/bench/run.ts
+  s_a90e6f4617f964::t_26eb7e121a8dc3 1-289
+site/worker/bench/state-machine.ts
+  s_a90e6f4617f964::t_d0e165aebab781 1-55
+site/worker/bench/store.ts
+  s_a90e6f4617f964::t_4481f0aa563313 1-65
+site/worker/bench/workflow.ts
+  s_a90e6f4617f964::t_da6d8c6b8b040c 1-56
+site/worker/index.ts
+  s_a90e6f4617f964::t_78bae7cc962998 1-211
+site/worker/program.ts
+  s_a90e6f4617f964::t_953f19dae29108 1-225
+site/worker/wasm.d.ts
+  s_a90e6f4617f964::t_934ae6c3ba247c 1-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5a2cc4902bde315440dd5a3273d9abe601ed8477",
+  "prompts": {},
+  "sessions": {
+    "s_a90e6f4617f964": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a16017-51a0-7338-8762-5c58263ca8af",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Jordan Coeyman <jcoeyman@cloudflare.com>"
+    }
+  }
+}
