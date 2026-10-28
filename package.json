@@ -5,20 +5,47 @@
   "type": "module",
   "license": "MIT",
   "author": "Jordan Coeyman",
-  "repository": { "type": "git", "url": "git+https://github.com/acoyfellow/amber.git" },
-  "homepage": "https://github.com/acoyfellow/amber#readme",
-  "keywords": ["cloudflare", "durable-objects", "workers", "codemode", "agents", "quickjs", "wasm", "snapshot", "durable-execution"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/acoyfellow/amber.git"
+  },
+  "homepage": "https://amber.customer0.dev",
+  "keywords": [
+    "cloudflare",
+    "durable-objects",
+    "workers",
+    "codemode",
+    "agents",
+    "quickjs",
+    "wasm",
+    "snapshot",
+    "durable-execution"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./dq.wasm": "./engine/dq.wasm"
   },
-  "files": ["src", "engine/dq.wasm", "engine/dq.c", "engine/wasi.patch", "engine/setup.sh", "THIRD_PARTY_NOTICES.md"],
-  "engines": { "node": ">=22" },
+  "files": [
+    "src",
+    "engine/dq.wasm",
+    "engine/dq.c",
+    "engine/wasi.patch",
+    "engine/setup.sh",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "typecheck": "tsc -p .",
+    "typecheck": "tsc -p . && tsc -p site",
+    "lint": "oxlint",
+    "site:build": "vite build --config site/client/vite.config.ts",
+    "site:dev": "npm run site:build && wrangler dev -c site/wrangler.jsonc",
+    "site:e2e": "node site/scripts/e2e.mjs",
+    "site:deploy": "npm run site:build && wrangler deploy -c site/wrangler.jsonc",
     "test": "vitest run",
     "e2e": "node examples/approvals/e2e.mjs",
-    "check": "npm run typecheck && npm test && npm run e2e",
+    "check": "npm run typecheck && npm run lint && npm test && npm run site:build && npm run e2e && npm run site:e2e",
     "engine": "bash engine/setup.sh"
   },
   "dependencies": {
@@ -26,8 +53,17 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261023.1",
+    "@foldkit/vite-plugin": "^0.26.1",
+    "@oxlint/plugins": "^1.78.0",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^22.0.0",
+    "agents": "^0.30.1",
+    "foldkit": "^0.166.0",
+    "happy-dom": "^20.14.6",
+    "oxlint": "^1.78.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "7.0.2",
+    "vite": "^8.3.5",
     "vitest": "5.0.5",
     "wrangler": "4.152.0"
   }
