@@ -1,0 +1,99 @@
+.gitignore
+  s_a90e6f4617f964::t_ffadbe0b4b29b1 1-3,5,7-9
+oxlint.config.ts
+  s_a90e6f4617f964::t_bc5354f7cf7730 1-42
+tools/oxlint/anti-slop/UPSTREAM.md
+  s_a90e6f4617f964::t_d09efc7af52643 1-48
+tools/oxlint/anti-slop/effect/index.ts
+  s_a90e6f4617f964::t_d03ab57d14aaf8 1-22
+tools/oxlint/anti-slop/effect/rules/no-manual-effect-error-tag.ts
+  s_a90e6f4617f964::t_1bf0a7c8749f5a 1-53
+tools/oxlint/anti-slop/effect/rules/no-manual-tag-comparison.ts
+  s_a90e6f4617f964::t_78476327edb5d1 1-46
+tools/oxlint/anti-slop/effect/rules/no-manual-tagged-construction.ts
+  s_a90e6f4617f964::t_87efed9ef29a09 1-38
+tools/oxlint/anti-slop/effect/rules/no-service-constructor-imports.ts
+  s_a90e6f4617f964::t_c8d467d9d4ce3e 1-53
+tools/oxlint/anti-slop/effect/rules/prefer-effect-match.ts
+  s_a90e6f4617f964::t_9d804d51dd733b 1-55
+tools/oxlint/anti-slop/effect/shared/tagged-values.ts
+  s_a90e6f4617f964::t_ef216016fe22c2 1-98
+tools/oxlint/anti-slop/index.ts
+  s_a90e6f4617f964::t_f027fdd7a3ac00 1-48
+tools/oxlint/anti-slop/rules/no-array-filter-map.ts
+  s_a90e6f4617f964::t_4d182a2aa0088d 1-29
+tools/oxlint/anti-slop/rules/no-chained-type-assertions.ts
+  s_a90e6f4617f964::t_701b07077b8a06 1-78
+tools/oxlint/anti-slop/rules/no-conditional-empty-object-spread.ts
+  s_a90e6f4617f964::t_307fccbc84d84d 1-50
+tools/oxlint/anti-slop/rules/no-known-value-widening.ts
+  s_a90e6f4617f964::t_212588173725df 1-416
+tools/oxlint/anti-slop/rules/no-module-mocking.ts
+  s_a90e6f4617f964::t_e0d5489161aeeb 1-81
+tools/oxlint/anti-slop/rules/no-object-parameters.ts
+  s_a90e6f4617f964::t_ba11afec83dd1c 1-84
+tools/oxlint/anti-slop/rules/no-reduce-accumulator-copy.ts
+  s_a90e6f4617f964::t_f908bc4d59980e 1-110
+tools/oxlint/anti-slop/rules/no-reflect-apply.ts
+  s_a90e6f4617f964::t_d0ee7df472567f 1-29
+tools/oxlint/anti-slop/rules/no-reflect-get.ts
+  s_a90e6f4617f964::t_46a63fda351b53 1-29
+tools/oxlint/anti-slop/rules/no-runtime-typeof.ts
+  s_a90e6f4617f964::t_517629ad670a51 1-78
+tools/oxlint/anti-slop/rules/no-shape-in-symbol-names.ts
+  s_a90e6f4617f964::t_f0b85be239fb8c 1-47
+tools/oxlint/anti-slop/rules/no-unknown-parameters.ts
+  s_a90e6f4617f964::t_a4038c0055fbbd 1-70
+tools/oxlint/anti-slop/rules/no-unknown-returns.ts
+  s_a90e6f4617f964::t_d39ce1435fc60c 1-83
+tools/oxlint/anti-slop/rules/no-unknown-type-aliases.ts
+  s_a90e6f4617f964::t_cd9d3807d236dd 1-55
+tools/oxlint/anti-slop/rules/no-unsafe-dictionary-type.ts
+  s_a90e6f4617f964::t_847bca0383dae8 1-155
+tools/oxlint/anti-slop/rules/no-widen-then-assert.ts
+  s_a90e6f4617f964::t_aa07c560de4291 1-367
+tools/oxlint/anti-slop/rules/require-readable-spacing.ts
+  s_a90e6f4617f964::t_0f2e162763f41a 1-48
+tools/oxlint/anti-slop/rules/require-safety-comment-for-type-assertion.ts
+  s_a90e6f4617f964::t_cf7cd9dc5347f4 1-132
+tools/oxlint/anti-slop/shared/array-method.ts
+  s_a90e6f4617f964::t_da032749f6295a 1-95
+tools/oxlint/anti-slop/shared/dictionary-types.ts
+  s_a90e6f4617f964::t_c37680fb3cb31d 1-516
+tools/oxlint/anti-slop/shared/function-parameters.ts
+  s_a90e6f4617f964::t_9473949f32fc99 1-50
+tools/oxlint/anti-slop/shared/lexical-type-parameters.ts
+  s_a90e6f4617f964::t_852febcc7411fa 1-62
+tools/oxlint/anti-slop/shared/reflect-method.ts
+  s_a90e6f4617f964::t_7b291981ab553f 1-25
+tools/oxlint/anti-slop/shared/scope.ts
+  s_a90e6f4617f964::t_f3c0c96e468081 1-16
+tools/oxlint/anti-slop/shared/type-alias-resolution.ts
+  s_a90e6f4617f964::t_89ab4cbc0deb94 1-251
+tools/oxlint/anti-slop/vendor/eslint-stylistic/LICENSE
+  s_a90e6f4617f964::t_2a2f9f9a0417c5 1-22
+tools/oxlint/anti-slop/vendor/eslint-stylistic/UPSTREAM.md
+  s_a90e6f4617f964::t_1d47bd34b5353b 1-28
+tools/oxlint/anti-slop/vendor/eslint-stylistic/padding-line-ast.ts
+  s_a90e6f4617f964::t_42dd43976c5f71 1-52
+tools/oxlint/anti-slop/vendor/eslint-stylistic/padding-line-between-statements.ts
+  s_a90e6f4617f964::t_ff5979ac3da195 1-907
+tools/oxlint/anti-slop/vendor/eslint-stylistic/padding-line-options.d.ts
+  s_a90e6f4617f964::t_bea4e1d99ce6c6 1-88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "dba0579dc909de33dceec8f6316948fcee3958d2",
+  "prompts": {},
+  "sessions": {
+    "s_a90e6f4617f964": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a16017-51a0-7338-8762-5c58263ca8af",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Jordan Coeyman <jcoeyman@cloudflare.com>"
+    }
+  }
+}
