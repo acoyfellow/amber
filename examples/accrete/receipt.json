@@ -1,0 +1,100 @@
+{
+  "kind": "amber-accrete-demo",
+  "at": "2026-10-29T18:05:20.641Z",
+  "accrete": "http://127.0.0.1:8799",
+  "workspace": "amber-demo-1793297120367",
+  "question": "{\"question\":\"tsc is clean. Apply this patch?\",\"before\":\"src/total.ts(7,65): error TS2322: Type 'string' is not assignable to type 'number'.\",\"after\":\"\"}",
+  "clean": {
+    "run": "clean",
+    "outcome": "Finished",
+    "result": {
+      "errorsBefore": 1,
+      "cleanAfter": true,
+      "approved": true,
+      "applied": true
+    },
+    "kills": [],
+    "durableObjectInstances": 1,
+    "tscCalls": [
+      {
+        "ms": 70,
+        "containerSeconds": 0
+      },
+      {
+        "ms": 55,
+        "containerSeconds": 0
+      }
+    ],
+    "writeDeliveries": [
+      "write_file",
+      "apply_patch"
+    ],
+    "distinctWriteKeys": 2,
+    "writeEffects": 2,
+    "appliedPatches": [
+      "3b7f9a9c9fbf7fa8"
+    ],
+    "finalFileSha": "3b7f9a9c9fbf7fa8",
+    "containerSeconds": 0,
+    "ms": 146
+  },
+  "killed": {
+    "run": "killed",
+    "outcome": "Finished",
+    "result": {
+      "errorsBefore": 1,
+      "cleanAfter": true,
+      "approved": true,
+      "applied": true
+    },
+    "kills": [
+      "midTool@3",
+      "afterEffect@3",
+      "waiting@5",
+      "midTool@6",
+      "afterResult@6"
+    ],
+    "durableObjectInstances": 6,
+    "tscCalls": [
+      {
+        "ms": 66,
+        "containerSeconds": 0
+      },
+      {
+        "ms": 58,
+        "containerSeconds": 0
+      }
+    ],
+    "writeDeliveries": [
+      "write_file",
+      "write_file",
+      "write_file",
+      "apply_patch",
+      "apply_patch"
+    ],
+    "distinctWriteKeys": 2,
+    "writeEffects": 2,
+    "appliedPatches": [
+      "3b7f9a9c9fbf7fa8"
+    ],
+    "finalFileSha": "3b7f9a9c9fbf7fa8",
+    "containerSeconds": 0,
+    "ms": 127
+  },
+  "samePatch": true,
+  "appliedOnceEach": true,
+  "firstTscKey": "accrete-clean:1",
+  "sweep": {
+    "seeds": 40,
+    "finished": 40,
+    "totalKills": 242,
+    "maxKillsInOneRun": 12,
+    "samePatchAsClean": 40,
+    "appliedExactlyOnce": 40,
+    "extraWriteDeliveries": 72,
+    "duplicateEffects": 0,
+    "tscCalls": 139,
+    "containerSeconds": 0,
+    "tscMedianMs": 48
+  }
+}
