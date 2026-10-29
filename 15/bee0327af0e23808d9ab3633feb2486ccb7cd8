@@ -1,0 +1,21 @@
+examples/accrete/receipt.json
+  s_a90e6f4617f964::t_c97657c090cdcd 1-100
+examples/accrete/run.ts
+  s_a90e6f4617f964::t_87170a93e5f0a3 1-283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "15bee0327af0e23808d9ab3633feb2486ccb7cd8",
+  "prompts": {},
+  "sessions": {
+    "s_a90e6f4617f964": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a16017-51a0-7338-8762-5c58263ca8af",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Jordan Coeyman <jcoeyman@cloudflare.com>"
+    }
+  }
+}
