@@ -1,0 +1,25 @@
+# amber
+
+> Pause code your agent wrote. An agent writes a script; the script calls tool() and freezes mid-loop until a human or a webhook answers. The whole running program, heap and call stack, is saved in a Cloudflare Durable Object and resumed. Nothing is replayed, so the script does not have to be deterministic.
+
+- Source: https://github.com/acoyfellow/amber
+- Install: npm install github:acoyfellow/amber effect@4.0.0
+- Benchmarks: https://amber.customer0.dev/benchmarks
+
+## API
+
+- DurableScript({ programId, storage, wasm, tools }): run(source), answer(token, value), alarm(), recover(), fork(), status()
+- read(schema, fn): runs inline, no snapshot; may repeat after a crash
+- write(schema, fn): snapshot first, gets an idempotency key; delivered at least once, deduplicate on the key
+- external(schema, { timeoutMs }): does not run; the program pauses until answer(token, value) or a Timeout
+
+## Measured
+
+- Kill fuzz: 3 scripts x 70 seeds, 210 runs, 1,044 injected crashes, 1,044 recoveries, 0 outcomes that differ from a clean run
+- codemode-pause bench in production: amber finished an LLM-style script consistently in one run; strict replay diverged at the first answer; lenient replay finished on the wrong result
+- Costs: about 2.7 KB stored per pause, and CPU-bound loops run about 4x slower than plain V8 because QuickJS is an interpreter
+
+## Limits
+
+- Scripts have no npm packages, no fetch, no timers; everything outside goes through tools
+- Experimental, version 0.1
