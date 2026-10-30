@@ -1,0 +1,19 @@
+site/client/src/bench/view.ts
+  s_a90e6f4617f964::t_b9c7d4941fff33 58-73,77-86,207-231,233-241
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ab486f2c13a7446ee1b17638f0ffef9af32734aa",
+  "prompts": {},
+  "sessions": {
+    "s_a90e6f4617f964": {
+      "agent_id": {
+        "tool": "pi",
+        "id": "01a16017-51a0-7338-8762-5c58263ca8af",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Jordan Coeyman <jcoeyman@cloudflare.com>"
+    }
+  }
+}
