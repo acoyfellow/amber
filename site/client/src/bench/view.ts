@@ -55,9 +55,35 @@ const cell = (h: B, result: BenchResult, column: Column, best: Option.Option<num
 	return h.td([h.Class(`px-3 py-2.5 text-right font-mono whitespace-nowrap ${isBest ? "font-semibold text-ok" : "text-ink"}`)], [column.show(result), isBest ? " ★" : ""]);
 };
 
+const systemCard = (h: B, result: BenchResult, columns: ReadonlyArray<Column>, best: ReadonlyArray<Option.Option<number>>): Html =>
+	h.li(
+		[h.Class("rounded-xl border border-line bg-panel p-4")],
+		[
+			h.p([h.Class("text-[14px] font-medium text-ink")], [SYSTEM_LABELS[result.system]]),
+			h.dl(
+				[h.Class("mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[13px]")],
+				columns.flatMap((column, index) => {
+					const isBest = Option.exists(best[index] ?? Option.none(), (value) => column.value(result) === value);
+
+					return [h.dt([h.Class("text-faint")], [column.label]), h.dd([h.Class(`text-right font-mono ${isBest ? "font-semibold text-ok" : "text-ink"}`)], [column.show(result), isBest ? " ★" : ""])];
+				}),
+			),
+		],
+	);
+
 const table = (h: B, results: ReadonlyArray<BenchResult>, columns: ReadonlyArray<Column>, caption: string): Html => {
 	const best = columns.map((column) => bestValue(results, column));
 
+	return h.div(
+		[],
+		[
+			h.ul([h.Class("grid gap-3 sm:hidden"), h.AriaLabel(caption)], results.map((result) => systemCard(h, result, columns, best))),
+			h.div([h.Class("hidden sm:block")], [wideTable(h, results, columns, caption, best)]),
+		],
+	);
+};
+
+const wideTable = (h: B, results: ReadonlyArray<BenchResult>, columns: ReadonlyArray<Column>, caption: string, best: ReadonlyArray<Option.Option<number>>): Html => {
 	return h.div(
 		[h.Class("max-w-full overflow-x-auto rounded-xl border border-line")],
 		[
@@ -178,7 +204,41 @@ const verdict = (row: CodemodeRow): Verdict => {
 	return { text: row.reason ?? row.outcome, tone: "text-bad" };
 };
 
+const codemodeStat = (h: B, label: string, value: string): ReadonlyArray<Html> => [h.dt([h.Class("text-faint")], [label]), h.dd([h.Class("text-right font-mono text-ink")], [value])];
+
+const codemodeCard = (h: B, row: CodemodeRow): Html => {
+	const { text, tone } = verdict(row);
+
+	return h.li(
+		[h.Class("rounded-xl border border-line bg-panel p-4")],
+		[
+			h.p([h.Class("text-[12px] text-faint")], [VARIANT_LABELS[row.variant]]),
+			h.p([h.Class("mt-0.5 text-[14px] font-medium text-ink")], [CODEMODE_LABELS[row.system]]),
+			h.p([h.Class(`mt-1.5 text-[14px] font-medium ${tone}`)], [text]),
+			h.dl(
+				[h.Class("mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[13px]")],
+				[
+					...codemodeStat(h, "Script runs", String(row.scriptRuns)),
+					...codemodeStat(h, "Calls replayed", String(row.replayedCalls)),
+					...codemodeStat(h, "Kills", String(row.kills)),
+					...codemodeStat(h, "Resume p50", nullable(row.p50Ms, ms)),
+					...codemodeStat(h, "Bytes / pause", nullable(row.bytesPerPause, (b) => `${b} B`)),
+				],
+			),
+		],
+	);
+};
+
 const codemodeTable = (h: B, rows: ReadonlyArray<CodemodeRow>): Html =>
+	h.div(
+		[],
+		[
+			h.ul([h.Class("grid gap-3 sm:hidden")], rows.map((row) => codemodeCard(h, row))),
+			h.div([h.Class("hidden sm:block")], [codemodeWide(h, rows)]),
+		],
+	);
+
+const codemodeWide = (h: B, rows: ReadonlyArray<CodemodeRow>): Html =>
 	h.div(
 		[h.Class("max-w-full overflow-x-auto rounded-xl border border-line")],
 		[
