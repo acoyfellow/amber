@@ -15,7 +15,7 @@ A stored program is data, so pausing is only the first operation on it:
 | --- | --- | --- |
 | **suspend** | wait days on a human or a webhook | shipped, kill-fuzzed |
 | **fork** | branch a running agent: search, A/B, evals from one state | shipped (host-level), F12 in-script |
-| **inspect** | read a frozen agent's remaining plan and live variables before it acts | F16 |
+| **inspect** | read a frozen agent's plan, frozen line and history, and gate its writes | shipped (F16), live variables not yet |
 | **reuse** | run a plan the model already wrote on new inputs, with no generation | F9 |
 | **migrate** | move a running agent between objects, regions or machines | implicit |
 
@@ -107,7 +107,7 @@ with SIGKILL, a reproducible engine build.
 | F3 | **Engine upgrades:** `wasm: { current, previous: [...] }` picked by stored hash; programs drain on the old engine, new ones start on the new one | today an upgrade orphans every paused program | a test pauses on engine A, upgrades, finishes on A, starts the next on B |
 | F4 | **Property-based model test** (fast-check `commands`: run/answer/kill/stale/fork/cancel/timeout against a ~40-line model) with shrinking; replaces the fixed-seed fuzz | finds and minimizes ordering bugs | in CI; seeded mutants in `script.ts` are caught |
 | F5 | **`tools.declaration()`:** generate the TypeScript `declare function tool(...)` overloads from the Schemas, for the model's prompt | the spike's script failures were `TypeError: not a function`; give the model real types | the spike's failing task passes with declarations in the prompt |
-| F16 | **Inspect and gate:** `script.inspect()` returns the program source, the line it is frozen on, the pending call and a bounded view of its live variables. A `gate(plan)` hook runs before every `write` and can allow, deny (thrown into the script as `Denied`) or hold for a human | review the plan, not the transcript: a frozen program is a checkable statement of what the agent is about to do | tests: a denied write never runs and the script sees `Denied`; a held write pauses like an `external` and survives kills; `inspect()` on a paused program shows the right line and variables |
+| F16 ✅ | **Inspect and gate** (shipped; live variables need engine support and are not included): `script.inspect()` returns the program source, the line it is frozen on, the pending call and a bounded view of its live variables. A `gate(plan)` hook runs before every `write` and can allow, deny (thrown into the script as `Denied`) or hold for a human | review the plan, not the transcript: a frozen program is a checkable statement of what the agent is about to do | tests: a denied write never runs and the script sees `Denied`; a held write pauses like an `external` and survives kills; `inspect()` on a paused program shows the right line and variables |
 
 ### 0.0.3: close the cost gap (the spike says this is the real risk)
 | ID | Feature | Why | Done when |

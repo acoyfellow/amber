@@ -112,6 +112,35 @@ After a crash the script continues from its last snapshot. Snapshots are taken a
 `external` call and at every loop slice, so the only work that can repeat is the script's own pure code
 and its `read` calls since then. The script can't touch the outside world except through tools.
 
+## Inspect a frozen program, and gate its writes
+
+A paused program is a checkable statement of what the agent is about to do, so you can review the plan
+instead of the transcript.
+
+```ts
+const seen = Option.getOrThrow(script.inspect());
+// { state: "waiting", line: 4, source, pending: { kind: "external", name: "ask", args: { id: 1 } },
+//   history: [{ step: 1, name: "list", kind: "read", args: {}, result: …, line: 1 }], snapshotBytes }
+
+const script = new DurableScript({
+  …,
+  gate: (plan) =>                       // runs before every write: { tool, args, line, source, history }
+    plan.tool === "close_issue" ? { hold: "closing needs a reviewer" }    // pause like an external call
+    : plan.tool === "delete_repo" ? { deny: "never" }                   // throws Denied into the script
+    : { allow: true },
+});
+// a held write returns Waiting { kind: "hold", name, args, reason, line, token }
+await script.answer(token, true);          // approve: the write runs, with its idempotency key
+await script.answer(token, "not this one"); // refuse: the script gets a catchable Denied error
+```
+
+`line` is the line of the program the call came from, read from the engine's own stack trace.
+`history` records each tool call with its arguments and a preview of the result. A held write is
+snapshotted like an `external` call, so it survives kills while it waits.
+
+Not yet: the program's live local variables. Reading them from the host needs engine debugging support,
+so `inspect()` shows the source, the line, the pending call and the history instead.
+
 ## More
 
 - **Fork:** `script.exportSnapshot()` while waiting, then `DurableScript.fork(exported, { … })` gives an
@@ -132,11 +161,13 @@ and its `read` calls since then. The script can't touch the outside world except
 
 - **16 semantics tests** (`test/semantics.test.ts`): each rule above, including timeouts, engine pinning,
   chunked snapshots, the snapshot cap and fork.
-- **Kill fuzz** (`test/fuzz.test.ts`): 3 scripts (approvals, webhook with timeouts, a 1M-iteration loop) ×
-  70 seeds, with crashes injected at every boundary and in the middle of tools. Each crashed run is compared
-  with a clean run of the same seed. Last run: 210 runs, 1,044 crashes, 1,044 recoveries, **0 mismatched
-  outcomes, 0 differing side effects**, 390 repeated writes, all with the same key and arguments (the
-  at-least-once case above).
+- **4 inspect and gate tests** (`test/inspect.test.ts`): the frozen line and history, a denied write that
+  never runs, a held write approved and refused, and a held write that survives a new instance.
+- **Kill fuzz** (`test/fuzz.test.ts`): 4 scripts (approvals, webhook with timeouts, approvals behind a gate
+  that holds every write for review, a 1M-iteration loop) × 70 seeds, with crashes injected at every
+  boundary and in the middle of tools. Each crashed run is compared with a clean run of the same seed. Last
+  run: 280 runs, 1,171 crashes, 1,171 recoveries, **0 mismatched outcomes, 0 differing side effects**, 390
+  repeated writes, all with the same key and arguments (the at-least-once case above).
 - **End to end under workerd** (`examples/approvals/e2e.mjs`): the example Worker, with `ctx.abort()`
   before two answers and a SIGKILL of the whole runtime before the third. It checks that the script
   finishes, closes exactly the approved issues, keeps one `Math.random()` run id throughout, and records

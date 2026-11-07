@@ -1,6 +1,11 @@
 export { type AgentLike, agentStorage, attachScript } from "./agents";
 export {
 	type CrashPoint,
+	type Decision,
+	type Gate,
+	type HistoryEntry,
+	type Inspection,
+	type Plan,
 	DurableScript,
 	EngineMismatch,
 	type Exported,

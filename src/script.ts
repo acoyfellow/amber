@@ -18,9 +18,52 @@ export class SimulatedCrash extends Error {
 	override readonly name = "SimulatedCrash";
 }
 
-export type CrashPoint = "read" | "beforeWrite" | "afterEffect" | "afterResult" | "waiting" | "slice";
+export type CrashPoint = "read" | "beforeWrite" | "afterEffect" | "afterResult" | "waiting" | "slice" | "held";
 
-export type Waiting = { readonly _tag: "Waiting"; readonly name: string; readonly args: unknown; readonly token: string; readonly step: number; readonly deadline: number | null };
+export type HistoryEntry = {
+	readonly step: number;
+	readonly name: string;
+	readonly kind: "read" | "write" | "external" | "denied" | "held";
+	readonly args: unknown;
+	readonly result: unknown;
+	readonly line: number | null;
+};
+
+export type Plan = {
+	readonly programId: string;
+	readonly step: number;
+	readonly tool: string;
+	readonly args: unknown;
+	readonly line: number | null;
+	readonly source: string;
+	readonly history: ReadonlyArray<HistoryEntry>;
+};
+
+export type Decision = { readonly allow: true } | { readonly deny: string } | { readonly hold: string };
+
+export type Gate = (plan: Plan) => Decision | Promise<Decision>;
+
+export type Inspection = {
+	readonly state: string;
+	readonly step: number;
+	readonly source: string;
+	readonly line: number | null;
+	readonly pending: { readonly kind: "write" | "external" | "hold"; readonly name: string; readonly args: unknown; readonly reason: string | null } | null;
+	readonly history: ReadonlyArray<HistoryEntry>;
+	readonly snapshotBytes: number;
+};
+
+export type Waiting = {
+	readonly _tag: "Waiting";
+	readonly kind: "external" | "hold";
+	readonly name: string;
+	readonly args: unknown;
+	readonly token: string;
+	readonly step: number;
+	readonly deadline: number | null;
+	readonly line: number | null;
+	readonly reason: string | null;
+};
 
 export type Outcome =
 	| Waiting
@@ -32,10 +75,12 @@ const Pending = Schema.Struct({
 	step: Schema.Number,
 	name: Schema.String,
 	args: Schema.String,
-	kind: Schema.Literals(["write", "external"]),
+	kind: Schema.Literals(["write", "external", "hold"]),
 	token: Schema.String,
 	result: Schema.NullOr(Schema.String),
 	deadline: Schema.NullOr(Schema.Number),
+	line: Schema.optional(Schema.NullOr(Schema.Number)),
+	reason: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
 type Pending = typeof Pending.Type;
@@ -71,6 +116,41 @@ const ScriptError = Schema.fromJsonString(Schema.Struct({ error: Schema.String, 
 
 const decodeScriptError = Schema.decodeUnknownOption(ScriptError);
 
+const Wrapped = Schema.fromJsonString(Schema.Struct({ a: Schema.Json, at: Schema.Number }));
+
+const decodeWrapped = Schema.decodeUnknownOption(Wrapped);
+
+const unwrap = (args: string): { readonly args: string; readonly line: number | null } =>
+	Option.match(decodeWrapped(args), {
+		onNone: () => ({ args, line: null }),
+		onSome: ({ a, at }) => ({ args: JSON.stringify(a), line: at > 0 ? at : null }),
+	});
+
+const History = Schema.fromJsonString(
+	Schema.Array(
+		Schema.Struct({
+			step: Schema.Number,
+			name: Schema.String,
+			kind: Schema.Literals(["read", "write", "external", "denied", "held"]),
+			args: Schema.Json,
+			result: Schema.Json,
+			line: Schema.NullOr(Schema.Number),
+		}),
+	),
+);
+
+const decodeHistory = Schema.decodeUnknownOption(History);
+
+const HISTORY_LIMIT = 200;
+
+const RESULT_PREVIEW = 400;
+
+const preview = (envelope: string): unknown => {
+	const text = envelope.length > RESULT_PREVIEW ? `${envelope.slice(0, RESULT_PREVIEW)}…` : envelope;
+
+	return Option.getOrElse(parseJson(text), () => text);
+};
+
 export type ScriptOptions = {
 	readonly programId: string;
 	readonly storage: ScriptStorage;
@@ -83,6 +163,7 @@ export type ScriptOptions = {
 	readonly maxSnapshotBytes?: number;
 	readonly now?: () => number;
 	readonly crash?: (point: CrashPoint, step: number) => void;
+	readonly gate?: Gate;
 	readonly log?: (line: string) => void;
 };
 
@@ -125,6 +206,9 @@ const scriptFailure = (output: string): Outcome =>
 
 const waitingOf = (meta: Meta, pending: Pending): Waiting => ({
 	_tag: "Waiting",
+	kind: pending.kind === "hold" ? "hold" : "external",
+	line: pending.line ?? null,
+	reason: pending.reason ?? null,
 	name: pending.name,
 	args: toJson(pending.args),
 	token: pending.token,
@@ -161,6 +245,16 @@ export class DurableScript {
 		this.options.storage.put("meta", encodeMeta(meta));
 
 		return meta;
+	}
+
+	private history(): ReadonlyArray<HistoryEntry> {
+		return Option.getOrElse(decodeHistory(this.options.storage.get("history")), () => []);
+	}
+
+	private record(entry: HistoryEntry): void {
+		const kept = this.history().filter((existing) => existing.step !== entry.step || existing.kind !== entry.kind);
+
+		this.options.storage.put("history", JSON.stringify([...kept, entry].slice(-HISTORY_LIMIT)));
 	}
 
 	private readSnapshot(meta: Meta): Uint8Array {
@@ -277,7 +371,8 @@ export class DurableScript {
 			if (Option.isNone(call)) return this.settle(meta, failure("BadToolCall", ran.output));
 
 			const step = meta.step + 1;
-			const { name, args } = call.value;
+			const { name } = call.value;
+			const { args, line } = unwrap(call.value.args);
 			const tool = this.options.tools[name];
 
 			if (tool === undefined) {
@@ -299,6 +394,7 @@ export class DurableScript {
 			if (tool.kind === "read") {
 				const envelope = await this.runTool(tool, decoded.success, context);
 
+				this.record({ step, name, kind: "read", args: decoded.success, result: preview(envelope), line });
 				this.crash("read", step);
 				meta = { ...meta, step };
 				ran = this.resume(engine, Option.some(envelope));
@@ -306,7 +402,29 @@ export class DurableScript {
 			}
 
 			if (tool.kind === "write") {
-				const pending: Pending = { step, name, args, kind: "write", token: "", result: null, deadline: null };
+				const decision = this.options.gate === undefined ? { allow: true as const } : await this.options.gate({ programId: this.options.programId, step, tool: name, args: decoded.success, line, source: meta.source, history: this.history() });
+
+				if ("deny" in decision) {
+					this.record({ step, name, kind: "denied", args: decoded.success, result: decision.deny, line });
+					meta = { ...meta, step };
+					ran = this.resume(engine, Option.some(thrown("Denied", `${name}: ${decision.deny}`)));
+					continue;
+				}
+
+				if ("hold" in decision) {
+					const held: Pending = { step, name, args, kind: "hold", token: crypto.randomUUID(), result: null, deadline: null, line, reason: decision.hold };
+					const saved = this.writeSnapshot(engine, { ...meta, step, state: "waiting", pending: held });
+
+					if (Result.isFailure(saved)) return this.settle(meta, saved.failure);
+
+					this.record({ step, name, kind: "held", args: decoded.success, result: decision.hold, line });
+					await this.options.storage.clearAlarm();
+					this.crash("held", step);
+
+					return waitingOf(saved.success, held);
+				}
+
+				const pending: Pending = { step, name, args, kind: "write", token: "", result: null, deadline: null, line };
 				const saved = this.writeSnapshot(engine, { ...meta, step, state: "running", pending });
 
 				if (Result.isFailure(saved)) return this.settle(meta, saved.failure);
@@ -319,13 +437,14 @@ export class DurableScript {
 
 				this.crash("afterEffect", step);
 				meta = this.saveMeta({ ...meta, pending: { ...pending, result: envelope } });
+				this.record({ step, name, kind: "write", args: decoded.success, result: preview(envelope), line });
 				this.crash("afterResult", step);
 				ran = this.resume(engine, Option.some(envelope));
 				continue;
 			}
 
 			const deadline = tool.timeoutMs === undefined ? null : this.now() + tool.timeoutMs;
-			const pending: Pending = { step, name, args, kind: "external", token: crypto.randomUUID(), result: null, deadline };
+			const pending: Pending = { step, name, args, kind: "external", token: crypto.randomUUID(), result: null, deadline, line };
 			const saved = this.writeSnapshot(engine, { ...meta, step, state: "waiting", pending });
 
 			if (Result.isFailure(saved)) return this.settle(meta, saved.failure);
@@ -385,6 +504,8 @@ export class DurableScript {
 
 		const recorded = this.saveMeta({ ...meta, pending: { ...pending, result: envelope } });
 
+		this.record({ step: pending.step, name: pending.name, kind: "write", args: decoded.success, result: preview(envelope), line: pending.line ?? null });
+
 		this.crash("afterResult", pending.step);
 
 		return this.drive(engine, this.resume(engine, Option.some(envelope)), recorded);
@@ -410,6 +531,7 @@ export class DurableScript {
 	run(source: string): Promise<Outcome> {
 		return this.exclusive(async () => {
 			this.dropSnapshot();
+			this.options.storage.delete("history");
 
 			const base = await baseFor(this.options.wasm);
 			const meta = this.saveMeta({
@@ -439,7 +561,24 @@ export class DurableScript {
 
 			if (meta.pending.token !== token) throw new StaleToken({ token });
 
-			const answered = this.saveMeta({ ...meta, state: "running", pending: { ...meta.pending, result: value(result) } });
+			const pending = meta.pending;
+
+			if (pending.kind === "hold") {
+				const approved = result === true;
+				const next: Pending = approved ? { ...pending, kind: "write", token: "" } : { ...pending, result: thrown("Denied", `${pending.name}: ${typeof result === "string" ? result : "denied by the reviewer"}`) };
+
+				if (!approved) this.record({ step: pending.step, name: pending.name, kind: "denied", args: toJson(pending.args), result: typeof result === "string" ? result : "denied by the reviewer", line: pending.line ?? null });
+
+				const decided = this.saveMeta({ ...meta, state: "running", pending: next });
+
+				await this.options.storage.setAlarm(this.now() + (this.options.recoveryDelayMs ?? 1000));
+
+				return this.continueFrom(decided);
+			}
+
+			if (pending.kind === "external") this.record({ step: pending.step, name: pending.name, kind: "external", args: toJson(pending.args), result: result ?? null, line: pending.line ?? null });
+
+			const answered = this.saveMeta({ ...meta, state: "running", pending: { ...pending, result: value(result) } });
 
 			await this.options.storage.setAlarm(this.now() + (this.options.recoveryDelayMs ?? 1000));
 
@@ -457,6 +596,23 @@ export class DurableScript {
 
 	status(): Option.Option<{ readonly state: Meta["state"]; readonly step: number; readonly snapshotBytes: number; readonly chunks: number; readonly baseSha: string }> {
 		return Option.map(this.load(), ({ state, step, snapshotBytes, chunks, baseSha }) => ({ state, step, snapshotBytes, chunks, baseSha }));
+	}
+
+	inspect(): Option.Option<Inspection> {
+		return Option.map(this.load(), (meta) => {
+			const history = this.history();
+			const pending = meta.pending;
+
+			return {
+				state: meta.state,
+				step: meta.step,
+				source: meta.source,
+				line: pending?.line ?? history.at(-1)?.line ?? null,
+				pending: pending === null ? null : { kind: pending.kind, name: pending.name, args: toJson(pending.args), reason: pending.reason ?? null },
+				history,
+				snapshotBytes: meta.snapshotBytes,
+			};
+		});
 	}
 
 	exportSnapshot(): Exported {

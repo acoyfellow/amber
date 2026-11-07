@@ -1,7 +1,16 @@
-export const PRELUDE = `var __amberTool = globalThis.tool;
+const BODY = `var __amberTool = globalThis.tool;
+var __amberOffset = __OFFSET__;
+var __amberAt = function () {
+  var lines = String(new Error().stack || "").split("\\n");
+  for (var i = 0; i < lines.length; i++) {
+    var m = /<program>:(\\d+)/.exec(lines[i]);
+    if (m && Number(m[1]) > __amberOffset) return Number(m[1]) - __amberOffset;
+  }
+  return 0;
+};
 var __amberRandom = { s: (Date.now() % 4294967295) || 1 };
 globalThis.tool = function (name, args) {
-  var reply = __amberTool(name, args === undefined ? null : args);
+  var reply = __amberTool(name, { a: args === undefined ? null : args, at: __amberAt() });
   if (reply !== null && typeof reply === "object") {
     if (typeof reply.r === "number") __amberRandom.s = (reply.r >>> 0) || 1;
     if (reply.t) { var error = new Error(reply.t.message); error.name = reply.t.name; throw error; }
@@ -16,6 +25,10 @@ Math.random = function () {
   return (x >>> 0) / 4294967296;
 };
 `;
+
+export const PRELUDE_LINES = BODY.split("\n").length - 1;
+
+export const PRELUDE = BODY.replace("__OFFSET__", String(PRELUDE_LINES));
 
 export type Envelope = { readonly v?: unknown; readonly t?: { readonly name: string; readonly message: string }; readonly r?: number };
 

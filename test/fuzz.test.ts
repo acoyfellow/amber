@@ -51,6 +51,15 @@ for (let pr = 0; pr < 3; pr++) {
   results.push(status);
 }
 ({ results })`,
+	gated: `const items = tool("list", {});
+const closed = [];
+const denied = [];
+for (const id of items) {
+  if (!tool("ask", { id })) continue;
+  try { tool("close", { id }); closed.push(id); }
+  catch (e) { if (e.name !== "Denied") throw e; denied.push(id); }
+}
+({ closed, denied })`,
 	loop: `let sum = 0;
 for (let i = 0; i < 1000000; i++) { sum += i % 1000; if (i % 250000 === 249999) tool("checkpoint", { i, sum }); }
 ({ sum })`,
@@ -103,7 +112,8 @@ const play = async (name: ScriptName, seed: number, rate: number): Promise<Run> 
 	const clock = { now: 1_000_000 };
 	const crash = crasher(hash(seed, name), rate, 25);
 	const tools = toolsFor(world, crash);
-	const make = () => new DurableScript({ programId: `${name}-${seed}`, storage, tools, wasm, now: () => clock.now, crash: crash.hit });
+	const gate = name === "gated" ? (plan: { readonly tool: string }) => (plan.tool === "close" ? { hold: "closing needs a reviewer" } : { allow: true as const }) : undefined;
+	const make = () => new DurableScript({ programId: `${name}-${seed}`, storage, tools, wasm, now: () => clock.now, crash: crash.hit, ...(gate === undefined ? {} : { gate }) });
 	let script = make();
 	let next: () => Promise<Outcome> = () => script.run(SCRIPTS[name]);
 	let resumes = 0;
@@ -141,6 +151,13 @@ const play = async (name: ScriptName, seed: number, rate: number): Promise<Run> 
 			continue;
 		}
 
+		if (waiting.kind === "hold") {
+			const approve = hash(seed, `hold${args}`) % 2 === 0;
+
+			next = () => script.answer(waiting.token, approve ? true : "not this one");
+			continue;
+		}
+
 		const answer = waiting.name === "ask" ? hash(seed, args) % 2 === 0 : { ok: hash(seed, args) % 2 === 0 };
 
 		next = () => script.answer(waiting.token, answer);
@@ -151,7 +168,7 @@ const play = async (name: ScriptName, seed: number, rate: number): Promise<Run> 
 
 const byKey = (log: ReadonlyArray<Entry>): Map<string, Entry> => new Map(log.map((entry) => [entry.key, entry]));
 
-test(`kill fuzz: ${SEEDS} seeds x 3 scripts, crashes at every boundary and mid-tool`, async () => {
+test(`kill fuzz: ${SEEDS} seeds x 4 scripts, crashes at every boundary and mid-tool`, async () => {
 	const report = { runs: 0, timeouts: 0, kills: 0, recoveries: 0, repeatedWrites: 0, conflictingRepeats: 0, mismatches: [] as Array<string>, byScript: {} as Record<string, { runs: number; kills: number }> };
 
 	for (const name of Object.keys(SCRIPTS) as Array<ScriptName>) {
