@@ -2,6 +2,8 @@
 
 **Pause code your agent wrote.**
 
+**Live demo:** [amber.customer0.dev](https://amber.customer0.dev): play a dungeon that is one `while` loop, and kill the server between moves. [Benchmarks](https://amber.customer0.dev/benchmarks) · [Roadmap](./ROADMAP.md)
+
 amber runs a script an LLM wrote at runtime inside a Cloudflare Durable Object. When the script calls
 `tool("ask_human", …)`, amber freezes the whole program: call stack, loop counters, closures, objects.
 It stores a few KB, and the object can be evicted, aborted or crash. When the answer arrives, maybe days
