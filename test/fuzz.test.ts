@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { Schema } from "effect";
 import { expect, test } from "vitest";
-import { type CrashPoint, DurableScript, external, memoryStorage, type Outcome, read, SimulatedCrash, write } from "../src";
+import { type CrashPoint, DurableScript, external, memoryStorage, NoProgram, type Outcome, read, type ScriptStorage, SimulatedCrash, write } from "../src";
 import { wasm } from "./support";
 
 const SEEDS = Number(process.env.AMBER_FUZZ_SEEDS ?? 70);
@@ -67,7 +67,7 @@ for (let i = 0; i < 1000000; i++) { sum += i % 1000; if (i % 250000 === 249999) 
 
 type ScriptName = keyof typeof SCRIPTS;
 
-type Crasher = { readonly hit: (point: CrashPoint | "midTool", step: number) => void; kills: number };
+type Crasher = { readonly hit: (point: CrashPoint | "midTool" | "storage", step: number) => void; kills: number };
 
 const crasher = (seed: number, rate: number, maxKills: number): Crasher => {
 	const random = mulberry(seed);
@@ -104,19 +104,51 @@ const toolsFor = (world: World, crash: Crasher) => {
 	};
 };
 
-type Run = { readonly outcome: Outcome; readonly world: World; readonly kills: number; readonly resumes: number };
+type Mode = "sync" | "async";
 
-const play = async (name: ScriptName, seed: number, rate: number): Promise<Run> => {
+const MODES: ReadonlyArray<Mode> = (process.env.AMBER_FUZZ_MODES ?? "sync,async").split(",").filter((mode): mode is Mode => mode === "sync" || mode === "async");
+
+const asyncStorage = (inner: ScriptStorage, crash: Crasher, random: () => number): ScriptStorage => {
+	const later = () => new Promise<void>((resolve) => setTimeout(resolve, Math.floor(random() * 3)));
+
+	return {
+		get: async (key) => {
+			await later();
+			crash.hit("storage", -1);
+
+			return inner.get(key);
+		},
+		keys: async (prefix) => {
+			await later();
+
+			return inner.keys(prefix);
+		},
+		commit: async (change) => {
+			await later();
+			crash.hit("storage", -1);
+			await inner.commit(change);
+			crash.hit("storage", -1);
+		},
+		setAlarm: inner.setAlarm,
+		clearAlarm: inner.clearAlarm,
+	};
+};
+
+type Run = { readonly outcome: Outcome; readonly world: World; readonly kills: number; readonly resumes: number; readonly restarts: number };
+
+const play = async (name: ScriptName, seed: number, rate: number, mode: Mode): Promise<Run> => {
 	const world: World = { log: [], timeouts: new Set() };
-	const storage = memoryStorage();
+	const memory = memoryStorage();
 	const clock = { now: 1_000_000 };
-	const crash = crasher(hash(seed, name), rate, 25);
+	const crash = crasher(hash(seed, `${name}:${mode}`), rate, 25);
+	const storage = mode === "async" ? asyncStorage(memory, crash, mulberry(hash(seed, "latency"))) : memory;
 	const tools = toolsFor(world, crash);
 	const gate = name === "gated" ? (plan: { readonly tool: string }) => (plan.tool === "close" ? { hold: "closing needs a reviewer" } : { allow: true as const }) : undefined;
 	const make = () => new DurableScript({ programId: `${name}-${seed}`, storage, tools, wasm, now: () => clock.now, crash: crash.hit, ...(gate === undefined ? {} : { gate }) });
 	let script = make();
 	let next: () => Promise<Outcome> = () => script.run(SCRIPTS[name]);
 	let resumes = 0;
+	let restarts = 0;
 
 	for (let guard = 0; guard < 2000; guard++) {
 		let outcome: Outcome;
@@ -127,12 +159,19 @@ const play = async (name: ScriptName, seed: number, rate: number): Promise<Run> 
 			if (!(error instanceof SimulatedCrash)) throw error;
 
 			script = make();
-			next = () => script.recover();
+			next = () =>
+				script.recover().catch((cause: unknown) => {
+					if (!(cause instanceof NoProgram)) throw cause;
+
+					restarts++;
+
+					return script.run(SCRIPTS[name]);
+				});
 			resumes++;
 			continue;
 		}
 
-		if (outcome._tag === "Finished" || outcome._tag === "Failed") return { outcome, world, kills: crash.kills, resumes };
+		if (outcome._tag === "Finished" || outcome._tag === "Failed") return { outcome, world, kills: crash.kills, resumes, restarts };
 
 		if (outcome._tag === "Running") {
 			next = () => script.alarm();
@@ -168,25 +207,30 @@ const play = async (name: ScriptName, seed: number, rate: number): Promise<Run> 
 
 const byKey = (log: ReadonlyArray<Entry>): Map<string, Entry> => new Map(log.map((entry) => [entry.key, entry]));
 
-test(`kill fuzz: ${SEEDS} seeds x 4 scripts, crashes at every boundary and mid-tool`, async () => {
-	const report = { runs: 0, timeouts: 0, kills: 0, recoveries: 0, repeatedWrites: 0, conflictingRepeats: 0, mismatches: [] as Array<string>, byScript: {} as Record<string, { runs: number; kills: number }> };
+test(`kill fuzz: ${SEEDS} seeds x 4 scripts x ${MODES.join("+")} storage, crashes at every boundary, mid-tool and around async storage calls`, async () => {
+	const report = { modes: MODES, runs: 0, restartsBeforeFirstCommit: 0, timeouts: 0, kills: 0, recoveries: 0, repeatedWrites: 0, conflictingRepeats: 0, mismatches: [] as Array<string>, byScript: {} as Record<string, { runs: number; kills: number }> };
 
-	for (const name of Object.keys(SCRIPTS) as Array<ScriptName>) {
-		report.byScript[name] = { runs: 0, kills: 0 };
+	for (const mode of MODES) for (const name of Object.keys(SCRIPTS) as Array<ScriptName>) {
+		const bucket = `${name}/${mode}`;
+
+		report.byScript[bucket] = { runs: 0, kills: 0 };
 
 		for (let seed = 1; seed <= SEEDS; seed++) {
-			const clean = await play(name, seed, 0);
-			const killed = await play(name, seed, 0.18);
+			const clean = await play(name, seed, 0, mode);
+			const killed = await play(name, seed, 0.18, mode);
 			const cleanKeys = byKey(clean.world.log);
 			const killedKeys = byKey(killed.world.log);
-			const label = `${name}#${seed}`;
+			const label = `${bucket}#${seed}`;
 
 			report.runs++;
 			report.timeouts += killed.world.timeouts.size;
 			report.kills += killed.kills;
 			report.recoveries += killed.resumes;
-			report.byScript[name].runs++;
-			report.byScript[name].kills += killed.kills;
+			report.restartsBeforeFirstCommit += killed.restarts;
+
+			if (killed.restarts > 0 && killed.world.log.length > 0 && killed.world.log.length === clean.world.log.length && mode === "sync") report.mismatches.push(`${label} restarted on sync storage`);
+			report.byScript[bucket].runs++;
+			report.byScript[bucket].kills += killed.kills;
 			report.repeatedWrites += killed.world.log.length - killedKeys.size;
 
 			for (const entry of killed.world.log) if (killedKeys.get(entry.key)?.args !== entry.args) report.conflictingRepeats++;

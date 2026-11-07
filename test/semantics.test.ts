@@ -17,7 +17,7 @@ describe("read tools", () => {
 		const outcome = await script.run(`const a = tool("double", { n: 2 }); const b = tool("double", { n: a }); ({ b })`);
 
 		expect(outcome).toEqual({ _tag: "Finished", result: { b: 8 } });
-		expect(storage.keys("snap:")).toEqual([]);
+		expect([...storage.data.keys()].filter((key) => key.startsWith("snap:"))).toEqual([]);
 	});
 
 	test("a thrown error lands in the script as a catchable Error", async () => {
@@ -63,7 +63,7 @@ describe("external tools", () => {
 		const waiting = asWaiting(await script.run(`const xs = []; for (let i = 0; i < 2; i++) xs.push(tool("ask", { q: "q" + i })); ({ xs })`));
 
 		expect(waiting.args).toEqual({ q: "q0" });
-		expect(storage.keys("snap:").length).toBeGreaterThan(0);
+		expect([...storage.data.keys()].filter((key) => key.startsWith("snap:")).length).toBeGreaterThan(0);
 
 		const next = asWaiting(await script.answer(waiting.token, "a"));
 
@@ -127,9 +127,9 @@ describe("engine pinning", () => {
 	test("a program stored by another engine build is refused with EngineMismatch", async () => {
 		const { script, storage } = scriptWith({ ask: external(Schema.Struct({})) });
 		const waiting = asWaiting(await script.run(`tool("ask", {})`));
-		const meta = JSON.parse(String(storage.get("meta")));
+		const meta = JSON.parse(String(storage.data.get("meta")));
 
-		storage.put("meta", JSON.stringify({ ...meta, baseSha: "0".repeat(64) }));
+		storage.data.set("meta", JSON.stringify({ ...meta, baseSha: "0".repeat(64) }));
 		await expect(script.answer(waiting.token, 1)).rejects.toBeInstanceOf(EngineMismatch);
 	});
 });
@@ -141,7 +141,7 @@ describe("snapshot size", () => {
 		const { script, storage } = scriptWith({ ask: external(Schema.Struct({})) }, { chunkBytes: 16 * 1024 });
 		const waiting = asWaiting(await script.run(hoard));
 
-		expect(storage.keys("snap:").length).toBeGreaterThan(3);
+		expect([...storage.data.keys()].filter((key) => key.startsWith("snap:")).length).toBeGreaterThan(3);
 		expect(await script.answer(waiting.token, "ok")).toEqual({ _tag: "Finished", result: { n: 4000, k: "ok" } });
 	});
 
@@ -161,14 +161,14 @@ describe("fork", () => {
 		const { script } = scriptWith(tools);
 		const waiting = asWaiting(await script.run(source));
 
-		return { tools, waiting, exported: script.exportSnapshot() };
+		return { tools, waiting, exported: await script.exportSnapshot() };
 	};
 
 	test("five forks from one snapshot diverge with their answers", async () => {
 		const { tools, waiting, exported } = await waitingSource();
 		const results = await Promise.all(
 			["a", "b", "c", "d", "e"].map(async (answer, index) => {
-				const fork = DurableScript.fork(exported, { programId: `fork-${index}`, storage: memoryStorage(), tools, wasm });
+				const fork = await DurableScript.fork(exported, { programId: `fork-${index}`, storage: memoryStorage(), tools, wasm });
 				const next = asWaiting(await fork.answer(waiting.token, answer));
 				const done = await fork.answer(next.token, answer.toUpperCase());
 
@@ -176,21 +176,21 @@ describe("fork", () => {
 			}),
 		);
 
-		expect(results.map((result) => (result as { first: string }).first)).toEqual(["a", "b", "c", "d", "e"]);
+		expect(results.map((result: unknown) => (result as { first: string }).first)).toEqual(["a", "b", "c", "d", "e"]);
 	});
 
 	test("forks refuse write tools unless allowWrites is set", async () => {
 		const { exported } = await waitingSource();
 		const tools = { ask: external(Schema.Struct({ q: Schema.String })), close: write(Id, () => undefined) };
 
-		expect(() => DurableScript.fork(exported, { programId: "f", storage: memoryStorage(), tools, wasm })).toThrow(WritesRefused);
-		expect(() => DurableScript.fork(exported, { programId: "f", storage: memoryStorage(), tools, wasm, allowWrites: true })).not.toThrow();
+		await expect(DurableScript.fork(exported, { programId: "f", storage: memoryStorage(), tools, wasm })).rejects.toBeInstanceOf(WritesRefused);
+		await expect(DurableScript.fork(exported, { programId: "f", storage: memoryStorage(), tools, wasm, allowWrites: true })).resolves.toBeInstanceOf(DurableScript);
 	});
 
 	test("without reseed forks draw the same Math.random; with reseed they differ", async () => {
 		const { tools, waiting, exported } = await waitingSource();
 		const roll = async (programId: string, reseed?: number) => {
-			const fork = DurableScript.fork(exported, { programId, storage: memoryStorage(), tools, wasm, ...(reseed === undefined ? {} : { reseed }) });
+			const fork = await DurableScript.fork(exported, { programId, storage: memoryStorage(), tools, wasm, ...(reseed === undefined ? {} : { reseed }) });
 			const next = asWaiting(await fork.answer(waiting.token, "x"));
 			const done = await fork.answer(next.token, "y");
 

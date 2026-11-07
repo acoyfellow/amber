@@ -151,8 +151,15 @@ so `inspect()` shows the source, the line, the pending call and the history inst
 - **Agents SDK:** `attachScript(agent, { programId, tools, wasm })` stores the program in the agent's
   storage and uses `agent.schedule()` instead of the object's single alarm. Give the agent an
   `amberAlarm()` method that calls `script.alarm()` (or pass your own `callback` name).
-- **Your own storage:** `DurableScript` takes any `ScriptStorage` (get, put, delete, keys, setAlarm,
-  clearAlarm). `memoryStorage()` is included for tests.
+- **Your own storage, and running a script away from its state:** `DurableScript` takes any
+  `ScriptStorage`: `get`, `keys`, an atomic `commit({ put, delete })`, `setAlarm` and `clearAlarm`.
+  Any of them may return a Promise. `durableObjectStorage(ctx.storage)` uses `transactionSync`, and
+  `memoryStorage()` is included for tests. To run a script where its tools are (for example inside an
+  agent's turn) and keep its state in another Durable Object, expose `storageMethods(ctx.storage)` from
+  that object and pass `remoteStorage(stub, { setAlarm, clearAlarm })`. Each snapshot, its stale chunks
+  and the program's metadata are written in **one** commit, so a crash can't leave a torn snapshot.
+  If `run()` fails before its first commit lands, nothing was stored: `recover()` then throws
+  `NoProgram`, and the caller should call `run()` again.
 - **Concurrency:** calls on one `DurableScript` instance are serialized. A stale or repeated `token` is
   refused with `StaleToken`, and answering a program that isn't waiting throws `NotWaiting`.
 
@@ -165,10 +172,12 @@ so `inspect()` shows the source, the line, the pending call and the history inst
 - **4 inspect and gate tests** (`test/inspect.test.ts`): the frozen line and history, a denied write that
   never runs, a held write approved and refused, and a held write that survives a new instance.
 - **Kill fuzz** (`test/fuzz.test.ts`): 4 scripts (approvals, webhook with timeouts, approvals behind a gate
-  that holds every write for review, a 1M-iteration loop) × 70 seeds, with crashes injected at every
-  boundary and in the middle of tools. Each crashed run is compared with a clean run of the same seed. Last
-  run: 280 runs, 1,171 crashes, 1,171 recoveries, **0 mismatched outcomes, 0 differing side effects**, 390
-  repeated writes, all with the same key and arguments (the at-least-once case above).
+  that holds every write for review, a 1M-iteration loop) × 70 seeds × 2 storage modes: in-memory, and an
+  async store with random latency that also crashes before reads and before and after commits. Crashes
+  are injected at every boundary and in the middle of tools. Each crashed run is compared with a clean run
+  of the same seed. Last run: 560 runs, 7,346 crashes, 7,346 recoveries, **0 mismatched outcomes, 0
+  differing side effects**, 937 repeated writes, all with the same key and arguments (the at-least-once
+  case above). 54 runs crashed before `run()`'s first commit and were started again, as documented.
 - **End to end under workerd** (`examples/approvals/e2e.mjs`): the example Worker, with `ctx.abort()`
   before two answers and a SIGKILL of the whole runtime before the third. It checks that the script
   finishes, closes exactly the approved issues, keeps one `Math.random()` run id throughout, and records

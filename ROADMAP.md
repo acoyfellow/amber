@@ -109,6 +109,12 @@ with SIGKILL, a reproducible engine build.
 | F5 | **`tools.declaration()`:** generate the TypeScript `declare function tool(...)` overloads from the Schemas, for the model's prompt | the spike's script failures were `TypeError: not a function`; give the model real types | the spike's failing task passes with declarations in the prompt |
 | F16 ✅ | **Inspect and gate** (shipped; live variables need engine support and are not included): `script.inspect()` returns the program source, the line it is frozen on, the pending call and a bounded view of its live variables. A `gate(plan)` hook runs before every `write` and can allow, deny (thrown into the script as `Denied`) or hold for a human | review the plan, not the transcript: a frozen program is a checkable statement of what the agent is about to do | tests: a denied write never runs and the script sees `Denied`; a held write pauses like an `external` and survives kills; `inspect()` on a paused program shows the right line and variables |
 
+### Shipped after 0.0.2
+| ID | Feature | Done |
+| --- | --- | --- |
+| F17 ✅ | **Async storage** with one atomic `commit`, `storageMethods` + `remoteStorage` to run a script away from its state (acoyfellow/amber#1, found dogfooding in my-ax) | kill fuzz in async mode with storage-level crashes: 560 runs, 7,346 crashes, 0 mismatches |
+| — ✅ | **`NotPausable`**: `tool()` inside a callback names the fix (found in Spike A2) | semantics test |
+
 ### 0.0.3: close the cost gap (the spike says this is the real risk)
 | ID | Feature | Why | Done when |
 | --- | --- | --- | --- |

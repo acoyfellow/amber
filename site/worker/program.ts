@@ -113,8 +113,8 @@ export class Program extends DurableObject {
 		return meta;
 	}
 
-	private snapshotOf(meta: Meta): Snapshot {
-		const status = this.script.status();
+	private async snapshotOf(meta: Meta): Promise<Snapshot> {
+		const status = await this.script.status();
 
 		return {
 			id: meta.id,
@@ -143,7 +143,7 @@ export class Program extends DurableObject {
 
 		if (!isLive(outcome)) await this.ctx.storage.deleteAlarm();
 
-		const status = this.script.status();
+		const status = await this.script.status();
 
 		const step: Step = {
 			n: previous.totalSteps + 1,
@@ -173,14 +173,14 @@ export class Program extends DurableObject {
 	}
 
 	snapshot(id: ProgramId): Promise<string> {
-		return this.exclusive(async () => encodeSnapshot(this.snapshotOf(this.load(id))));
+		return this.exclusive(async () => encodeSnapshot(await this.snapshotOf(this.load(id))));
 	}
 
 	start(id: ProgramId, source: string): Promise<string> {
 		return this.exclusive(async () => {
 			const meta = await this.record(emptyMeta(id), "start", Option.none(), () => this.script.run(source));
 
-			return encodeSnapshot(this.snapshotOf(meta));
+			return encodeSnapshot(await this.snapshotOf(meta));
 		});
 	}
 
@@ -197,7 +197,7 @@ export class Program extends DurableObject {
 			const token = meta.token;
 			const next = await this.record(meta, "answer", Option.some(answer), () => this.script.answer(token, parsed.value));
 
-			return encodeAnswer(Result.succeed(this.snapshotOf(next)));
+			return encodeAnswer(Result.succeed(await this.snapshotOf(next)));
 		});
 	}
 

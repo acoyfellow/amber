@@ -237,28 +237,32 @@ export class DurableScript {
 		this.options.crash?.(point, step);
 	}
 
-	private load(): Option.Option<Meta> {
-		return decodeMeta(this.options.storage.get("meta"));
+	private async load(): Promise<Option.Option<Meta>> {
+		return decodeMeta(await this.options.storage.get("meta"));
 	}
 
-	private saveMeta(meta: Meta): Meta {
-		this.options.storage.put("meta", encodeMeta(meta));
+	private async saveMeta(meta: Meta): Promise<Meta> {
+		await this.options.storage.commit({ put: [["meta", encodeMeta(meta)]] });
 
 		return meta;
 	}
 
-	private history(): ReadonlyArray<HistoryEntry> {
-		return Option.getOrElse(decodeHistory(this.options.storage.get("history")), () => []);
+	private async history(): Promise<ReadonlyArray<HistoryEntry>> {
+		return Option.getOrElse(decodeHistory(await this.options.storage.get("history")), () => []);
 	}
 
-	private record(entry: HistoryEntry): void {
-		const kept = this.history().filter((existing) => existing.step !== entry.step || existing.kind !== entry.kind);
+	private async record(entry: HistoryEntry): Promise<void> {
+		const kept = (await this.history()).filter((existing) => existing.step !== entry.step || existing.kind !== entry.kind);
 
-		this.options.storage.put("history", JSON.stringify([...kept, entry].slice(-HISTORY_LIMIT)));
+		await this.options.storage.commit({ put: [["history", JSON.stringify([...kept, entry].slice(-HISTORY_LIMIT))]] });
 	}
 
-	private readSnapshot(meta: Meta): Uint8Array {
-		const parts = Array.from({ length: meta.chunks }, (_, index) => this.options.storage.get(`snap:${index}`));
+	private async snapshotKeys(): Promise<ReadonlyArray<string>> {
+		return this.options.storage.keys("snap:");
+	}
+
+	private async readSnapshot(meta: Meta): Promise<Uint8Array> {
+		const parts = await Promise.all(Array.from({ length: meta.chunks }, (_, index) => this.options.storage.get(`snap:${index}`)));
 		const total = parts.reduce((size, part) => size + (part instanceof Uint8Array ? part.length : 0), 0);
 		const bytes = new Uint8Array(total);
 		let offset = 0;
@@ -273,11 +277,7 @@ export class DurableScript {
 		return bytes;
 	}
 
-	private dropSnapshot(): void {
-		for (const key of this.options.storage.keys("snap:")) this.options.storage.delete(key);
-	}
-
-	private writeSnapshot(engine: Engine, meta: Meta): Result.Result<Meta, Outcome> {
+	private async writeSnapshot(engine: Engine, meta: Meta): Promise<Result.Result<Meta, Outcome>> {
 		const delta = Effect.runSync(engine.saveDelta);
 		const cap = this.options.maxSnapshotBytes ?? 8 * 1024 * 1024;
 
@@ -286,16 +286,19 @@ export class DurableScript {
 		const size = this.options.chunkBytes ?? 100 * 1024;
 		const chunks = Math.max(1, Math.ceil(delta.length / size));
 
-		this.dropSnapshot();
+		const next = { ...meta, chunks, snapshotBytes: delta.length };
+		const parts = Array.from({ length: chunks }, (_, index) => [`snap:${index}`, delta.slice(index * size, (index + 1) * size)] as const);
+		const stale = (await this.snapshotKeys()).filter((key) => Number(key.slice("snap:".length)) >= chunks);
 
-		for (let index = 0; index < chunks; index++) this.options.storage.put(`snap:${index}`, delta.slice(index * size, (index + 1) * size));
+		await this.options.storage.commit({ put: [...parts, ["meta", encodeMeta(next)]], delete: stale });
 
-		return Result.succeed(this.saveMeta({ ...meta, chunks, snapshotBytes: delta.length }));
+		return Result.succeed(next);
 	}
 
 	private async settle(meta: Meta, outcome: Outcome): Promise<Outcome> {
-		this.dropSnapshot();
-		this.saveMeta({ ...meta, state: outcome._tag === "Finished" ? "finished" : "failed", pending: null, chunks: 0, outcome: JSON.parse(JSON.stringify(outcome)) });
+		const settled: Meta = { ...meta, state: outcome._tag === "Finished" ? "finished" : "failed", pending: null, chunks: 0, outcome: JSON.parse(JSON.stringify(outcome)) };
+
+		await this.options.storage.commit({ put: [["meta", encodeMeta(settled)]], delete: await this.snapshotKeys() });
 		await this.options.storage.clearAlarm();
 
 		return outcome;
@@ -314,7 +317,7 @@ export class DurableScript {
 
 		const engine = await this.engine();
 
-		Effect.runSync(engine.restore(base.bytes, this.readSnapshot(meta)));
+		Effect.runSync(engine.restore(base.bytes, await this.readSnapshot(meta)));
 		engine.setBudget(this.options.budgetTicks ?? 50);
 
 		return engine;
@@ -356,7 +359,7 @@ export class DurableScript {
 			if (ran.run === "error") return this.settle(meta, scriptFailure(ran.output));
 
 			if (ran.run === "slice") {
-				const saved = this.writeSnapshot(engine, { ...meta, state: "sliced", pending: null });
+				const saved = await this.writeSnapshot(engine, { ...meta, state: "sliced", pending: null });
 
 				if (Result.isFailure(saved)) return this.settle(meta, saved.failure);
 
@@ -394,7 +397,7 @@ export class DurableScript {
 			if (tool.kind === "read") {
 				const envelope = await this.runTool(tool, decoded.success, context);
 
-				this.record({ step, name, kind: "read", args: decoded.success, result: preview(envelope), line });
+				await this.record({ step, name, kind: "read", args: decoded.success, result: preview(envelope), line });
 				this.crash("read", step);
 				meta = { ...meta, step };
 				ran = this.resume(engine, Option.some(envelope));
@@ -402,10 +405,10 @@ export class DurableScript {
 			}
 
 			if (tool.kind === "write") {
-				const decision = this.options.gate === undefined ? { allow: true as const } : await this.options.gate({ programId: this.options.programId, step, tool: name, args: decoded.success, line, source: meta.source, history: this.history() });
+				const decision = this.options.gate === undefined ? { allow: true as const } : await this.options.gate({ programId: this.options.programId, step, tool: name, args: decoded.success, line, source: meta.source, history: await this.history() });
 
 				if ("deny" in decision) {
-					this.record({ step, name, kind: "denied", args: decoded.success, result: decision.deny, line });
+					await this.record({ step, name, kind: "denied", args: decoded.success, result: decision.deny, line });
 					meta = { ...meta, step };
 					ran = this.resume(engine, Option.some(thrown("Denied", `${name}: ${decision.deny}`)));
 					continue;
@@ -413,11 +416,11 @@ export class DurableScript {
 
 				if ("hold" in decision) {
 					const held: Pending = { step, name, args, kind: "hold", token: crypto.randomUUID(), result: null, deadline: null, line, reason: decision.hold };
-					const saved = this.writeSnapshot(engine, { ...meta, step, state: "waiting", pending: held });
+					const saved = await this.writeSnapshot(engine, { ...meta, step, state: "waiting", pending: held });
 
 					if (Result.isFailure(saved)) return this.settle(meta, saved.failure);
 
-					this.record({ step, name, kind: "held", args: decoded.success, result: decision.hold, line });
+					await this.record({ step, name, kind: "held", args: decoded.success, result: decision.hold, line });
 					await this.options.storage.clearAlarm();
 					this.crash("held", step);
 
@@ -425,7 +428,7 @@ export class DurableScript {
 				}
 
 				const pending: Pending = { step, name, args, kind: "write", token: "", result: null, deadline: null, line };
-				const saved = this.writeSnapshot(engine, { ...meta, step, state: "running", pending });
+				const saved = await this.writeSnapshot(engine, { ...meta, step, state: "running", pending });
 
 				if (Result.isFailure(saved)) return this.settle(meta, saved.failure);
 
@@ -436,8 +439,8 @@ export class DurableScript {
 				const envelope = await this.runTool(tool, decoded.success, context);
 
 				this.crash("afterEffect", step);
-				meta = this.saveMeta({ ...meta, pending: { ...pending, result: envelope } });
-				this.record({ step, name, kind: "write", args: decoded.success, result: preview(envelope), line });
+				meta = await this.saveMeta({ ...meta, pending: { ...pending, result: envelope } });
+				await this.record({ step, name, kind: "write", args: decoded.success, result: preview(envelope), line });
 				this.crash("afterResult", step);
 				ran = this.resume(engine, Option.some(envelope));
 				continue;
@@ -445,7 +448,7 @@ export class DurableScript {
 
 			const deadline = tool.timeoutMs === undefined ? null : this.now() + tool.timeoutMs;
 			const pending: Pending = { step, name, args, kind: "external", token: crypto.randomUUID(), result: null, deadline, line };
-			const saved = this.writeSnapshot(engine, { ...meta, step, state: "waiting", pending });
+			const saved = await this.writeSnapshot(engine, { ...meta, step, state: "waiting", pending });
 
 			if (Result.isFailure(saved)) return this.settle(meta, saved.failure);
 
@@ -467,7 +470,7 @@ export class DurableScript {
 		if (meta.state === "waiting" && meta.pending !== null) {
 			if (meta.pending.deadline === null || this.now() < meta.pending.deadline) return waitingOf(meta, meta.pending);
 
-			const timedOut = this.saveMeta({ ...meta, state: "running", pending: { ...meta.pending, result: thrown("Timeout", `${meta.pending.name} timed out`) } });
+			const timedOut = await this.saveMeta({ ...meta, state: "running", pending: { ...meta.pending, result: thrown("Timeout", `${meta.pending.name} timed out`) } });
 
 			return this.continueFrom(timedOut);
 		}
@@ -502,9 +505,9 @@ export class DurableScript {
 
 		this.crash("afterEffect", pending.step);
 
-		const recorded = this.saveMeta({ ...meta, pending: { ...pending, result: envelope } });
+		const recorded = await this.saveMeta({ ...meta, pending: { ...pending, result: envelope } });
 
-		this.record({ step: pending.step, name: pending.name, kind: "write", args: decoded.success, result: preview(envelope), line: pending.line ?? null });
+		await this.record({ step: pending.step, name: pending.name, kind: "write", args: decoded.success, result: preview(envelope), line: pending.line ?? null });
 
 		this.crash("afterResult", pending.step);
 
@@ -523,18 +526,15 @@ export class DurableScript {
 
 		engine.setBudget(this.options.budgetTicks ?? 50);
 
-		const started = this.saveMeta({ ...meta, baseSha: base.sha, step: 0, state: "running", pending: null, chunks: 0 });
+		const started = await this.saveMeta({ ...meta, baseSha: base.sha, step: 0, state: "running", pending: null, chunks: 0 });
 
 		return this.drive(engine, Effect.runSync(engine.start(PRELUDE + meta.source)), started);
 	}
 
 	run(source: string): Promise<Outcome> {
 		return this.exclusive(async () => {
-			this.dropSnapshot();
-			this.options.storage.delete("history");
-
 			const base = await baseFor(this.options.wasm);
-			const meta = this.saveMeta({
+			const meta: Meta = {
 				programId: this.options.programId,
 				source,
 				baseSha: base.sha,
@@ -545,8 +545,9 @@ export class DurableScript {
 				chunks: 0,
 				snapshotBytes: 0,
 				reseed: null,
-			});
+			};
 
+			await this.options.storage.commit({ put: [["meta", encodeMeta(meta)]], delete: [...(await this.snapshotKeys()), "history"] });
 			await this.options.storage.setAlarm(this.now() + (this.options.recoveryDelayMs ?? 1000));
 
 			return this.fresh(meta);
@@ -555,7 +556,7 @@ export class DurableScript {
 
 	answer(token: string, result: unknown): Promise<Outcome> {
 		return this.exclusive(async () => {
-			const meta = Option.getOrThrowWith(this.load(), () => new NoProgram({ programId: this.options.programId }));
+			const meta = Option.getOrThrowWith(await this.load(), () => new NoProgram({ programId: this.options.programId }));
 
 			if (meta.state !== "waiting" || meta.pending === null) throw new NotWaiting({ state: meta.state });
 
@@ -567,18 +568,18 @@ export class DurableScript {
 				const approved = result === true;
 				const next: Pending = approved ? { ...pending, kind: "write", token: "" } : { ...pending, result: thrown("Denied", `${pending.name}: ${typeof result === "string" ? result : "denied by the reviewer"}`) };
 
-				if (!approved) this.record({ step: pending.step, name: pending.name, kind: "denied", args: toJson(pending.args), result: typeof result === "string" ? result : "denied by the reviewer", line: pending.line ?? null });
+				if (!approved) await this.record({ step: pending.step, name: pending.name, kind: "denied", args: toJson(pending.args), result: typeof result === "string" ? result : "denied by the reviewer", line: pending.line ?? null });
 
-				const decided = this.saveMeta({ ...meta, state: "running", pending: next });
+				const decided = await this.saveMeta({ ...meta, state: "running", pending: next });
 
 				await this.options.storage.setAlarm(this.now() + (this.options.recoveryDelayMs ?? 1000));
 
 				return this.continueFrom(decided);
 			}
 
-			if (pending.kind === "external") this.record({ step: pending.step, name: pending.name, kind: "external", args: toJson(pending.args), result: result ?? null, line: pending.line ?? null });
+			if (pending.kind === "external") await this.record({ step: pending.step, name: pending.name, kind: "external", args: toJson(pending.args), result: result ?? null, line: pending.line ?? null });
 
-			const answered = this.saveMeta({ ...meta, state: "running", pending: { ...pending, result: value(result) } });
+			const answered = await this.saveMeta({ ...meta, state: "running", pending: { ...pending, result: value(result) } });
 
 			await this.options.storage.setAlarm(this.now() + (this.options.recoveryDelayMs ?? 1000));
 
@@ -587,20 +588,22 @@ export class DurableScript {
 	}
 
 	recover(): Promise<Outcome> {
-		return this.exclusive(async () => this.continueFrom(Option.getOrThrowWith(this.load(), () => new NoProgram({ programId: this.options.programId }))));
+		return this.exclusive(async () => this.continueFrom(Option.getOrThrowWith(await this.load(), () => new NoProgram({ programId: this.options.programId }))));
 	}
 
 	alarm(): Promise<Outcome> {
 		return this.recover();
 	}
 
-	status(): Option.Option<{ readonly state: Meta["state"]; readonly step: number; readonly snapshotBytes: number; readonly chunks: number; readonly baseSha: string }> {
-		return Option.map(this.load(), ({ state, step, snapshotBytes, chunks, baseSha }) => ({ state, step, snapshotBytes, chunks, baseSha }));
+	async status(): Promise<Option.Option<{ readonly state: Meta["state"]; readonly step: number; readonly snapshotBytes: number; readonly chunks: number; readonly baseSha: string }>> {
+		return Option.map(await this.load(), ({ state, step, snapshotBytes, chunks, baseSha }) => ({ state, step, snapshotBytes, chunks, baseSha }));
 	}
 
-	inspect(): Option.Option<Inspection> {
-		return Option.map(this.load(), (meta) => {
-			const history = this.history();
+	async inspect(): Promise<Option.Option<Inspection>> {
+		const loaded = await this.load();
+		const history = await this.history();
+
+		return Option.map(loaded, (meta) => {
 			const pending = meta.pending;
 
 			return {
@@ -615,15 +618,15 @@ export class DurableScript {
 		});
 	}
 
-	exportSnapshot(): Exported {
-		const meta = Option.getOrThrowWith(this.load(), () => new NoProgram({ programId: this.options.programId }));
+	async exportSnapshot(): Promise<Exported> {
+		const meta = Option.getOrThrowWith(await this.load(), () => new NoProgram({ programId: this.options.programId }));
 
 		if (meta.state !== "waiting") throw new NotWaiting({ state: meta.state });
 
-		return { meta: encodeMeta(meta), snapshot: this.readSnapshot(meta) };
+		return { meta: encodeMeta(meta), snapshot: await this.readSnapshot(meta) };
 	}
 
-	static fork(exported: Exported, options: ScriptOptions & { readonly allowWrites?: boolean; readonly reseed?: number }): DurableScript {
+	static async fork(exported: Exported, options: ScriptOptions & { readonly allowWrites?: boolean; readonly reseed?: number }): Promise<DurableScript> {
 		const writes = Object.entries(options.tools).flatMap(([name, tool]) => (tool.kind === "write" ? [name] : []));
 
 		if (writes.length > 0 && options.allowWrites !== true) throw new WritesRefused({ tools: writes });
@@ -632,9 +635,9 @@ export class DurableScript {
 		const size = options.chunkBytes ?? 100 * 1024;
 		const chunks = Math.max(1, Math.ceil(exported.snapshot.length / size));
 
-		for (let index = 0; index < chunks; index++) options.storage.put(`snap:${index}`, exported.snapshot.slice(index * size, (index + 1) * size));
+		const parts = Array.from({ length: chunks }, (_, index) => [`snap:${index}`, exported.snapshot.slice(index * size, (index + 1) * size)] as const);
 
-		options.storage.put("meta", encodeMeta({ ...meta, programId: options.programId, chunks, reseed: options.reseed ?? null }));
+		await options.storage.commit({ put: [...parts, ["meta", encodeMeta({ ...meta, programId: options.programId, chunks, reseed: options.reseed ?? null })]] });
 
 		return new DurableScript(options);
 	}

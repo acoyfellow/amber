@@ -48,7 +48,7 @@ describe("inspect", () => {
 
 		expect(waiting.line).toBe(4);
 
-		const seen = Option.getOrThrow(script.inspect());
+		const seen = Option.getOrThrow(await script.inspect());
 
 		expect(seen.state).toBe("waiting");
 		expect(seen.line).toBe(4);
@@ -58,7 +58,7 @@ describe("inspect", () => {
 
 		await script.answer(waiting.token, true);
 
-		const later = Option.getOrThrow(script.inspect());
+		const later = Option.getOrThrow(await script.inspect());
 
 		expect(later.history.map((entry) => `${entry.kind}:${entry.name}`)).toEqual(["read:list", "external:ask", "write:close"]);
 		expect(later.history.find((entry) => entry.name === "close")?.line).toBe(6);

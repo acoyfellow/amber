@@ -1,6 +1,6 @@
 {
   "name": "@acoyfellow/amber",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Pause code your agent wrote. Run an LLM-written script in a Cloudflare Durable Object, freeze it mid-loop at a tool() call, and resume it later on a fresh object without replay.",
   "type": "module",
   "license": "MIT",

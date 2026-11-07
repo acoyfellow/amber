@@ -18,5 +18,5 @@ export {
 	type Waiting,
 	WritesRefused,
 } from "./script";
-export { durableObjectStorage, type MemoryStorage, memoryStorage, type ScriptStorage } from "./storage";
+export { type Alarms, type Change, durableObjectStorage, type MemoryStorage, memoryStorage, type RemoteStore, remoteStorage, type ScriptStorage, type StorageMethods, storageMethods, type StoredValue } from "./storage";
 export { external, read, type Tool, type ToolContext, type Tools, write } from "./tools";
