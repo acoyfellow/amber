@@ -201,3 +201,19 @@ describe("fork", () => {
 		expect(await roll("seed-1", 11)).not.toBe(await roll("seed-2", 99));
 	});
 });
+
+describe("tool() inside a callback", () => {
+	test("throws NotPausable with a hint to use a for...of loop", async () => {
+		const { script } = scriptWith({ ask: external(Schema.Struct({ id: Schema.Number })) });
+		const outcome = await script.run(`let m = ""; try { [1, 2].forEach((id) => tool("ask", { id })); } catch (e) { m = e.name + ": " + e.message; } ({ m })`);
+
+		expect(outcome).toMatchObject({ _tag: "Finished", result: { m: expect.stringMatching(/^NotPausable: tool\("ask"\) was called inside a callback.*for\.\.\.of/) } });
+	});
+
+	test("the same program written with for...of pauses normally", async () => {
+		const { script } = scriptWith({ ask: external(Schema.Struct({ id: Schema.Number })) });
+		const outcome = await script.run(`const xs = []; for (const id of [1, 2]) xs.push(tool("ask", { id })); ({ xs })`);
+
+		expect(outcome).toMatchObject({ _tag: "Waiting", name: "ask", args: { id: 1 } });
+	});
+});

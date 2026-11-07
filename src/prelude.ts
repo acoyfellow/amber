@@ -10,7 +10,16 @@ var __amberAt = function () {
 };
 var __amberRandom = { s: (Date.now() % 4294967295) || 1 };
 globalThis.tool = function (name, args) {
-  var reply = __amberTool(name, { a: args === undefined ? null : args, at: __amberAt() });
+  var reply;
+  try { reply = __amberTool(name, { a: args === undefined ? null : args, at: __amberAt() }); }
+  catch (cause) {
+    if (cause instanceof TypeError && /cannot be suspended/.test(String(cause.message))) {
+      var hint = new TypeError('tool("' + name + '") was called inside a callback (forEach, map, filter, sort, reduce, a getter or a constructor argument). amber can only pause a direct call: use a for...of loop instead.');
+      hint.name = "NotPausable";
+      throw hint;
+    }
+    throw cause;
+  }
   if (reply !== null && typeof reply === "object") {
     if (typeof reply.r === "number") __amberRandom.s = (reply.r >>> 0) || 1;
     if (reply.t) { var error = new Error(reply.t.message); error.name = reply.t.name; throw error; }
