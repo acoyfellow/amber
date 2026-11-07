@@ -1,0 +1,23 @@
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	"name": "amber-agent-eval",
+	"main": "src/index.ts",
+	// Local spike only: run with `wrangler dev`. Routes run model-written code and spend AI budget, so never deploy this.
+	"workers_dev": false,
+	"preview_urls": false,
+	"compatibility_date": "2026-10-01",
+	"compatibility_flags": ["nodejs_compat"],
+	"ai": { "binding": "AI", "remote": true },
+	"vars": { "SPEND_CAP_USD": "4.5" },
+	"durable_objects": {
+		"bindings": [
+			{ "name": "WORLD", "class_name": "World" },
+			{ "name": "LOOP", "class_name": "LoopHarness" },
+			{ "name": "RUNNER", "class_name": "ScriptRunner" },
+			{ "name": "PROGRAMS", "class_name": "ProgramStore" },
+			{ "name": "SPEND", "class_name": "Spend" }
+		]
+	},
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["World", "LoopHarness", "ScriptRunner", "ProgramStore", "Spend"] }],
+	"rules": [{ "type": "CompiledWasm", "globs": ["**/*.wasm"], "fallthrough": true }]
+}
