@@ -160,7 +160,7 @@ const proof = (h: H): Html =>
 		],
 	);
 
-const INSTALL_SNIPPET = `npm install github:acoyfellow/amber effect@4.0.0`;
+const INSTALL_SNIPPET = `npm install github:acoyfellow/amber effect`;
 
 const USE_SNIPPET = `import { DurableObject } from "cloudflare:workers";
 import { Schema } from "effect";

@@ -46,10 +46,11 @@ the code and the code has to wait.
 ## Install
 
 ```sh
-npm install github:acoyfellow/amber effect@4.0.0
+npm install github:acoyfellow/amber effect
 ```
 
-The package ships TypeScript source, which Wrangler bundles directly. It depends on `effect` 4.0.0.
+The package ships TypeScript source, which Wrangler bundles directly. `effect` is a peer dependency
+(`^4.0.0`), so amber uses your app's copy. The library tests pass on 4.0.0 and 4.1.2.
 
 ## Use it in a Durable Object
 

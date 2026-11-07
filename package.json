@@ -48,9 +48,6 @@
     "check": "npm run typecheck && npm run lint && npm test && npm run site:build && npm run e2e && npm run site:e2e",
     "engine": "bash engine/setup.sh"
   },
-  "dependencies": {
-    "effect": "4.0.0"
-  },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261023.1",
     "@foldkit/vite-plugin": "^0.26.1",
@@ -58,6 +55,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^22.0.0",
     "agents": "^0.30.1",
+    "effect": "4.0.0",
     "foldkit": "^0.166.0",
     "happy-dom": "^20.14.6",
     "oxlint": "^1.78.0",
@@ -66,5 +64,8 @@
     "vite": "^8.3.5",
     "vitest": "5.0.5",
     "wrangler": "4.152.0"
+  },
+  "peerDependencies": {
+    "effect": "^4.0.0"
   }
 }

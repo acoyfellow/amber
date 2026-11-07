@@ -3,7 +3,7 @@
 > Pause code your agent wrote. An agent writes a script; the script calls tool() and freezes mid-loop until a human or a webhook answers. The whole running program, heap and call stack, is saved in a Cloudflare Durable Object and resumed. Nothing is replayed, so the script does not have to be deterministic.
 
 - Source: https://github.com/acoyfellow/amber
-- Install: npm install github:acoyfellow/amber effect@4.0.0
+- Install: npm install github:acoyfellow/amber effect
 - Benchmarks: https://amber.customer0.dev/benchmarks
 
 ## API
