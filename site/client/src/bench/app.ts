@@ -3,16 +3,25 @@ import type { Update } from "foldkit";
 import { Command } from "foldkit";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import { defineMessageUnion } from "foldkit/message";
+import { defineTaggedUnion } from "foldkit/schema";
 import { modifyFields } from "foldkit/struct";
 import { CodemodeResult, CodemodeRun } from "../../../shared/codemode";
 import { BENCH_PATH, BENCH_SYSTEMS, BenchBoard, BenchResult, BenchRun, BenchSystem } from "../../../shared/bench";
 
+export const BenchPhase = defineTaggedUnion({
+	Idle: {},
+	RunningCodemode: { queue: Schema.Array(BenchSystem) },
+	RunningSystem: { system: BenchSystem, queue: Schema.Array(BenchSystem) },
+});
+
+export type BenchPhase = typeof BenchPhase.Type;
+
+export const isBenchBusy = (phase: BenchPhase): boolean => !BenchPhase.isAnyOf(["Idle"])(phase);
+
 export const BenchModel = Schema.Struct({
 	results: Schema.Array(BenchResult),
 	codemode: Schema.Option(CodemodeResult),
-	runningCodemode: Schema.Boolean,
-	queue: Schema.Array(BenchSystem),
-	running: Schema.Option(BenchSystem),
+	phase: BenchPhase,
 	log: Schema.Array(Schema.String),
 	error: Schema.Option(Schema.String),
 });
@@ -81,20 +90,23 @@ export const RunSystem = Command.define("RunSystem", {
 		),
 });
 
-export const initialBenchModel: BenchModel = { results: [], codemode: Option.none(), runningCodemode: false, queue: [], running: Option.none(), log: [], error: Option.none() };
+export const initialBenchModel: BenchModel = { results: [], codemode: Option.none(), phase: BenchPhase.Idle(), log: [], error: Option.none() };
 
 type BenchReturn = Update.Return<BenchModel, BenchMessage>;
 
 const replaceResult = (results: ReadonlyArray<BenchResult>, result: BenchResult): ReadonlyArray<BenchResult> =>
 	BENCH_SYSTEMS.flatMap((system) => (system === result.system ? [result] : results.filter((current) => current.system === system)));
 
-const next = (model: BenchModel): BenchReturn => {
-	const [head, ...rest] = model.queue;
+const queueOf = (phase: BenchPhase): ReadonlyArray<BenchSystem> =>
+	BenchPhase.match(phase, { Idle: () => [], RunningCodemode: ({ queue }) => queue, RunningSystem: ({ queue }) => queue });
 
-	if (head === undefined) return { model: modifyFields(model, { running: () => Option.none(), log: (log) => [...log, "All systems done."] }) };
+const next = (model: BenchModel): BenchReturn => {
+	const [head, ...rest] = queueOf(model.phase);
+
+	if (head === undefined) return { model: modifyFields(model, { phase: () => BenchPhase.Idle(), log: (log) => [...log, "All systems done."] }) };
 
 	return {
-		model: modifyFields(model, { queue: () => rest, running: () => Option.some(head), log: (log) => [...log, `Running ${head}…`] }),
+		model: modifyFields(model, { phase: () => BenchPhase.RunningSystem({ system: head, queue: rest }), log: (log) => [...log, `Running ${head}…`] }),
 		commands: [RunSystem({ system: head })],
 	};
 };
@@ -109,16 +121,15 @@ export const benchUpdate = (model: BenchModel, message: BenchMessage): BenchRetu
 			next(
 				modifyFields(model, {
 					codemode: () => Option.some(run.result),
-					runningCodemode: () => false,
 					log: (log) => [...log, `codemode-pause: ${run.cached ? "cached (ran under 20 s ago)" : "done"}, ${run.result.rows.filter((row) => row.completed && row.consistent).length} of ${run.result.rows.length} runs finished correctly and consistently`],
 				}),
 			),
-		FailedCodemode: ({ reason }) => next(modifyFields(model, { runningCodemode: () => false, log: (log) => [...log, `codemode-pause: failed (${reason})`] })),
+		FailedCodemode: ({ reason }) => next(modifyFields(model, { log: (log) => [...log, `codemode-pause: failed (${reason})`] })),
 		ClickedRunAll: () =>
-			Option.isSome(model.running) || model.runningCodemode
+			isBenchBusy(model.phase)
 				? { model }
 				: {
-						model: modifyFields(model, { queue: () => BENCH_SYSTEMS, runningCodemode: () => true, log: () => ["Running codemode-pause…"], error: () => Option.none() }),
+						model: modifyFields(model, { phase: () => BenchPhase.RunningCodemode({ queue: BENCH_SYSTEMS }), log: () => ["Running codemode-pause…"], error: () => Option.none() }),
 						commands: [RunCodemode()],
 					},
 		GotRun: ({ run }) =>

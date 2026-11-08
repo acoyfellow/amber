@@ -1,5 +1,6 @@
 export { type AgentLike, agentStorage, attachScript } from "./agents";
 export {
+	canTransition,
 	type CrashPoint,
 	type Decision,
 	type Gate,
@@ -9,12 +10,15 @@ export {
 	DurableScript,
 	EngineMismatch,
 	type Exported,
+	IllegalTransition,
 	NoProgram,
 	NotWaiting,
 	type Outcome,
+	type ProgramState,
 	type ScriptOptions,
 	SimulatedCrash,
 	StaleToken,
+	TRANSITIONS,
 	type Waiting,
 	WritesRefused,
 } from "./script";

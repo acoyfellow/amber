@@ -196,6 +196,19 @@ program changed). Any fresh instance of the same `dq.wasm` produces an identical
 only the delta, in chunks, along with the base's SHA-256. On restore it rebuilds the base, checks the hash
 and applies the delta.
 
+Each program is in one of five states, and `status()` reports it:
+
+| State | Means | Can move to |
+|---|---|---|
+| `running` | running now, or a write is in flight | any state |
+| `sliced` | paused by the tick budget; an alarm continues it | any state |
+| `waiting` | paused on an external tool; needs `answer()` or its timeout | `running` |
+| `finished` | done; `recover()` returns the stored result | nothing |
+| `failed` | done with an error | nothing |
+
+`TRANSITIONS` and `canTransition(from, to)` export this table. amber checks every state change against it
+and throws `IllegalTransition` instead of saving a bad one. `run()` always starts over, from any state.
+
 ## Limits
 
 - **Same engine build only.** A snapshot loads only into the `dq.wasm` that wrote it. Upgrading the engine

@@ -14,6 +14,8 @@ export class EngineMismatch extends Schema.TaggedError<EngineMismatch>()("Engine
 
 export class WritesRefused extends Schema.TaggedError<WritesRefused>()("WritesRefused", { tools: Schema.Array(Schema.String) }) {}
 
+export class IllegalTransition extends Schema.TaggedError<IllegalTransition>()("IllegalTransition", { from: Schema.String, to: Schema.String }) {}
+
 export class SimulatedCrash extends Error {
 	override readonly name = "SimulatedCrash";
 }
@@ -99,6 +101,18 @@ const Meta = Schema.Struct({
 });
 
 type Meta = typeof Meta.Type;
+
+export type ProgramState = Meta["state"];
+
+export const TRANSITIONS: { readonly [From in ProgramState]: ReadonlyArray<ProgramState> } = {
+	running: ["running", "sliced", "waiting", "finished", "failed"],
+	sliced: ["running", "sliced", "waiting", "finished", "failed"],
+	waiting: ["running"],
+	finished: [],
+	failed: [],
+};
+
+export const canTransition = (from: ProgramState, to: ProgramState): boolean => TRANSITIONS[from].includes(to);
 
 const MetaJson = Schema.fromJsonString(Meta);
 
@@ -237,12 +251,26 @@ export class DurableScript {
 		this.options.crash?.(point, step);
 	}
 
+	private lastState: ProgramState | null = null;
+
 	private async load(): Promise<Option.Option<Meta>> {
-		return decodeMeta(await this.options.storage.get("meta"));
+		const meta = decodeMeta(await this.options.storage.get("meta"));
+
+		this.lastState = Option.match(meta, { onNone: () => null, onSome: ({ state }) => state });
+
+		return meta;
+	}
+
+	private guard(meta: Meta): void {
+		const from = this.lastState;
+
+		if (from !== null && !canTransition(from, meta.state)) throw new IllegalTransition({ from, to: meta.state });
 	}
 
 	private async saveMeta(meta: Meta): Promise<Meta> {
+		this.guard(meta);
 		await this.options.storage.commit({ put: [["meta", encodeMeta(meta)]] });
+		this.lastState = meta.state;
 
 		return meta;
 	}
@@ -290,7 +318,9 @@ export class DurableScript {
 		const parts = Array.from({ length: chunks }, (_, index) => [`snap:${index}`, delta.slice(index * size, (index + 1) * size)] as const);
 		const stale = (await this.snapshotKeys()).filter((key) => Number(key.slice("snap:".length)) >= chunks);
 
+		this.guard(next);
 		await this.options.storage.commit({ put: [...parts, ["meta", encodeMeta(next)]], delete: stale });
+		this.lastState = next.state;
 
 		return Result.succeed(next);
 	}
@@ -298,7 +328,9 @@ export class DurableScript {
 	private async settle(meta: Meta, outcome: Outcome): Promise<Outcome> {
 		const settled: Meta = { ...meta, state: outcome._tag === "Finished" ? "finished" : "failed", pending: null, chunks: 0, outcome: JSON.parse(JSON.stringify(outcome)) };
 
+		this.guard(settled);
 		await this.options.storage.commit({ put: [["meta", encodeMeta(settled)]], delete: await this.snapshotKeys() });
+		this.lastState = settled.state;
 		await this.options.storage.clearAlarm();
 
 		return outcome;
@@ -548,6 +580,7 @@ export class DurableScript {
 			};
 
 			await this.options.storage.commit({ put: [["meta", encodeMeta(meta)]], delete: [...(await this.snapshotKeys()), "history"] });
+			this.lastState = meta.state;
 			await this.options.storage.setAlarm(this.now() + (this.options.recoveryDelayMs ?? 1000));
 
 			return this.fresh(meta);

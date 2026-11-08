@@ -3,7 +3,7 @@ import type { Document, Html, HtmlBuilder } from "foldkit/html";
 import { CODEMODE_LABELS, type CodemodeResult, type CodemodeRow, VARIANT_LABELS } from "../../../shared/codemode";
 import { APPROVAL_COUNT, BENCH_SYSTEMS, type BenchResult, type BenchSystem, LOOP_LIMIT, SYSTEM_LABELS } from "../../../shared/bench";
 import { code, eyebrow, inline, link, PRIMARY, REPO, SECONDARY, sectionTitle } from "../view/ui";
-import { BenchMessage, type BenchModel } from "./app";
+import { BenchMessage, type BenchModel, BenchPhase, isBenchBusy } from "./app";
 import { CODEMODE_SCRIPTS, countLines, IMPLEMENTATIONS } from "./sources";
 
 type B = HtmlBuilder<BenchMessage>;
@@ -132,8 +132,8 @@ const runPanel = (h: B, model: BenchModel): Html =>
 				[h.Class("flex flex-wrap items-center gap-3")],
 				[
 					h.button(
-						[h.Type("button"), h.Disabled(Option.isSome(model.running) || model.runningCodemode), h.Class(`${PRIMARY} h-10 px-4`), h.OnClick(BenchMessage.ClickedRunAll())],
-						[model.runningCodemode ? "Running codemode-pause…" : Option.match(model.running, { onNone: () => "Run all in prod", onSome: (system) => `Running ${SYSTEM_LABELS[system]}…` })],
+						[h.Type("button"), h.Disabled(isBenchBusy(model.phase)), h.Class(`${PRIMARY} h-10 px-4`), h.OnClick(BenchMessage.ClickedRunAll())],
+						[BenchPhase.match(model.phase, { Idle: () => "Run all in prod", RunningCodemode: () => "Running codemode-pause…", RunningSystem: ({ system }) => `Running ${SYSTEM_LABELS[system]}…` })],
 					),
 					h.span([h.Class("text-[12.5px] text-faint")], ["Runs codemode-pause, then the four systems, one after another on this Worker. Each result is cached for 20 s."]),
 				],

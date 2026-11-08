@@ -9,6 +9,7 @@
 ## API
 
 - DurableScript({ programId, storage, wasm, tools }): run(source), answer(token, value), alarm(), recover(), fork(), status()
+- Program states: running, sliced, waiting, finished, failed. TRANSITIONS lists the allowed moves and canTransition(from, to) checks one; finished and failed are final, and waiting only moves to running. An illegal move throws IllegalTransition. run() starts over from any state.
 - read(schema, fn): runs inline, no snapshot; may repeat after a crash
 - write(schema, fn): snapshot first, gets an idempotency key; delivered at least once, deduplicate on the key
 - external(schema, { timeoutMs }): does not run; the program pauses until answer(token, value) or a Timeout

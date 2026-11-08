@@ -1,8 +1,7 @@
-import { Option } from "effect";
 import { Command, given, message, model, story } from "foldkit/story";
 import { describe, expect, test } from "vitest";
 import type { BenchResult, BenchSystem } from "../../../shared/bench";
-import { BenchMessage, benchUpdate, initialBenchModel, RunCodemode, RunSystem } from "./app";
+import { BenchMessage, BenchPhase, benchUpdate, initialBenchModel, RunCodemode, RunSystem } from "./app";
 import { countLines } from "./sources";
 
 const result = (system: BenchSystem): BenchResult => ({
@@ -19,23 +18,21 @@ describe("running all benchmarks", () => {
 			benchUpdate,
 			given(initialBenchModel),
 			message(BenchMessage.ClickedRunAll()),
-			model((current) => expect(current.runningCodemode).toBe(true)),
+			model((current) => expect(current.phase).toEqual(BenchPhase.RunningCodemode({ queue: ["amber", "workflows", "agents", "durable-object"] }))),
 			Command.resolve(RunCodemode(), BenchMessage.FailedCodemode({ reason: "slow" })),
 			model((current) => {
-				expect(current.runningCodemode).toBe(false);
-				expect(current.running).toEqual(Option.some("amber"));
-				expect(current.queue).toEqual(["workflows", "agents", "durable-object"]);
+				expect(current.phase).toEqual(BenchPhase.RunningSystem({ system: "amber", queue: ["workflows", "agents", "durable-object"] }));
 			}),
 			Command.resolve(RunSystem({ system: "amber" }), BenchMessage.GotRun({ run: { result: result("amber"), cached: false } })),
 			model((current) => {
-				expect(current.running).toEqual(Option.some("workflows"));
+				expect(current.phase).toEqual(BenchPhase.RunningSystem({ system: "workflows", queue: ["agents", "durable-object"] }));
 				expect(current.results.map((r) => r.system)).toEqual(["amber"]);
 			}),
 			Command.resolve(RunSystem({ system: "workflows" }), BenchMessage.FailedRun({ system: "workflows", reason: "boom" })),
 			Command.resolve(RunSystem({ system: "agents" }), BenchMessage.GotRun({ run: { result: result("agents"), cached: true } })),
 			Command.resolve(RunSystem({ system: "durable-object" }), BenchMessage.GotRun({ run: { result: result("durable-object"), cached: false } })),
 			model((current) => {
-				expect(current.running).toEqual(Option.none());
+				expect(current.phase).toEqual(BenchPhase.Idle());
 				expect(current.results.map((r) => r.system)).toEqual(["amber", "agents", "durable-object"]);
 				expect(current.log.some((line) => line.includes("workflows: failed (boom)"))).toBe(true);
 			}),
@@ -43,7 +40,7 @@ describe("running all benchmarks", () => {
 	});
 
 	test("A second click while a run is in flight does nothing", () => {
-		const running = { ...initialBenchModel, running: Option.some<BenchSystem>("agents"), queue: ["durable-object" as const] };
+		const running = { ...initialBenchModel, phase: BenchPhase.RunningSystem({ system: "agents", queue: ["durable-object"] }) };
 
 		story(
 			benchUpdate,
